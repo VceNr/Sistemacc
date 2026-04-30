@@ -5,8 +5,8 @@ import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button"; // Si no lo usas, lo puedes quitar
+import { Input } from "@/components/ui/input";   // Si no lo usas, lo puedes quitar
 import {
   Form,
   FormControl,
@@ -15,7 +15,7 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
-import { loginUser } from "@/lib/api";
+import { loginUser } from "@/lib/api"; // Asegúrate de que la ruta sea correcta según tu proyecto
 
 // ── Schema de validación ──────────────────────────────────────
 const loginSchema = z.object({
@@ -39,14 +39,23 @@ export default function LoginForm() {
   const loading = form.formState.isSubmitting;
 
   async function onSubmit(values: LoginSchema) {
+    // Llamamos a la API que ahora usa Firebase Auth + Firestore
     const result = await loginUser(values.email, values.password);
 
     if (!result.success) {
+      // Si falla (credenciales incorrectas, inactivo, etc.), mostramos el error
       form.setError("root", { message: result.message });
       return;
     }
 
-    router.push("/dashboard");
+    // ¡AQUÍ ESTÁ LA MAGIA! 
+    // Usamos el redirectUrl que viene del backend según el cargo del usuario
+    if (result.redirectUrl) {
+      router.push(result.redirectUrl);
+    } else {
+      // Por si acaso falla la ruta, un fallback de seguridad
+      router.push("/");
+    }
   }
 
   return (
