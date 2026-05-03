@@ -311,7 +311,7 @@ export default function HallazgoForm({ redirectUrl }: HallazgoFormProps) {
                 border: "none", borderRadius: 10, padding: "10px 28px",
                 color: "#fff", fontSize: 14, fontWeight: 500,
                 cursor: loading ? "not-allowed" : "pointer",
-                fontFamily: "inherit",
+                fontFamily: "inherit",  
                 boxShadow: loading ? "none" : "0 4px 20px rgba(99,102,241,0.3)",
               }}>
                 {loading ? "Guardando..." : "Guardar hallazgo"}
