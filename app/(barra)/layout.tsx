@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { AuthProvider } from "@/lib/auth-context";
 
 export const metadata: Metadata = {
   title: "My App",
@@ -6,5 +7,9 @@ export const metadata: Metadata = {
 };
 
 export default function BarraLayout({ children }: { children: React.ReactNode }) {
-  return <>{children}</>;
+  return (
+    <AuthProvider>
+      {children}
+    </AuthProvider>
+  );
 }

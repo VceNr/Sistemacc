@@ -16,7 +16,7 @@ export async function setSession(token: string) {
     httpOnly: true,
     secure:   process.env.NODE_ENV === "production",
     sameSite: "strict",
-    maxAge:   60 // 1 día en segundos
+    maxAge: 60 * 60 * 24 // ← cambia el 60 por esto (1 día)
   });
 }
 
