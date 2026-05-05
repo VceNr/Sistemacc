@@ -40,7 +40,7 @@ export default function PanelAdmin() {
 // VALIDACIÓN DE CARGO
         if (data.cargo !== "admin") {
           // Si es un analista intentando entrar al panel de admin, lo regresamos a su lugar
-          router.push("/panel-analista"); // <-- CAMBIADO
+          router.push("/panel-admin"); // <-- CAMBIADO
           return;
         }
         // Si pasa todas las validaciones, guardamos los datos y quitamos el loading

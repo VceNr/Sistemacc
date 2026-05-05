@@ -259,7 +259,7 @@ export default function HallazgosAdmin() {
                           borderRadius: 6, padding: "5px 12px", color: "#a5b4fc",
                           fontSize: 12, cursor: "pointer", fontFamily: "inherit",
                         }}>Ver</button>
-                        {rol === "admin" && (
+                        {(rol === "admin" || h.nombreCreador === nombre) && (
                           <button
                             onClick={() => handleEliminar(h.id, h.activo)}
                             disabled={eliminando === h.id}

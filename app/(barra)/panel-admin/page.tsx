@@ -39,7 +39,7 @@ export default function PanelAdmin() {
   useEffect(() => {
     if (!authLoading) {
       if (!user) router.push("/login");
-      if (rol !== null && rol !== "admin") router.push("/panel-analista");
+      if (rol !== null && rol !== "analista") router.push("/panel-admin");
     }
   }, [user, rol, authLoading]);
 
@@ -151,11 +151,13 @@ export default function PanelAdmin() {
             borderRadius: 10, padding: "10px 20px", color: "#e8e8f0",
             fontSize: 14, cursor: "pointer", fontFamily: "inherit",
           }}>Ver todos los hallazgos</button>
-          <button onClick={() => router.push("/panel-admin/auditoria")} style={{
-            background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)",
-            borderRadius: 10, padding: "10px 20px", color: "#e8e8f0",
-            fontSize: 14, cursor: "pointer", fontFamily: "inherit",
-          }}>Ver auditoría</button>
+          {rol === "admin" && (
+            <button onClick={() => router.push("/panel-admin/auditoria")} style={{
+              background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)",
+              borderRadius: 10, padding: "10px 20px", color: "#e8e8f0",
+              fontSize: 14, cursor: "pointer", fontFamily: "inherit",
+            }}>Ver auditoría</button>
+          )}
         </div>
 
         {/* Hallazgos recientes — últimos 5 */}
