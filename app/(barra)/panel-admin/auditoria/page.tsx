@@ -15,33 +15,33 @@ interface LogAuditoria {
 }
 
 const colorAccion: Record<string, string> = {
-  "CREAR_HALLAZGO":   "#10b981",
-  "EDITAR_HALLAZGO":  "#3b82f6",
-  "ELIMINAR_HALLAZGO":"#ef4444",
-  "CAMBIO_ESTADO":    "#f59e0b",
-  "LOGIN":            "#6366f1",
-  "LOGOUT":           "#6b7280",
+  "CREAR_HALLAZGO":    "#10b981",
+  "EDITAR_HALLAZGO":   "#3b82f6",
+  "ELIMINAR_HALLAZGO": "#ef4444",
+  "CAMBIO_ESTADO":     "#f59e0b",
+  "LOGIN":             "#6366f1",
+  "LOGOUT":            "#6b7280",
 };
 
 export default function Auditoria() {
   const { user, nombre, rol, loading: authLoading } = useAuth();
   const router = useRouter();
 
-  const [logs,    setLogs]    = useState<LogAuditoria[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [filtroAccion, setFiltroAccion] = useState("");
+  const [logs,          setLogs]          = useState<LogAuditoria[]>([]);
+  const [loading,       setLoading]       = useState(true);
+  const [filtroAccion,  setFiltroAccion]  = useState("");
   const [filtroUsuario, setFiltroUsuario] = useState("");
 
-  // Protección — solo admin
+  // Protección cliente — proxy ya protege en servidor
   useEffect(() => {
     if (!authLoading) {
-      if (!user) router.push("/login");
-      if (rol !== null && rol !== "admin") router.push("/panel-analista");
+      if (!user)             router.push("/login");
+      if (rol && rol !== "admin") router.push("/panel-admin"); // ← redirige al panel único
     }
-  }, [user, rol, authLoading]);
+  }, [user, rol, authLoading, router]);
 
-  // Cargar logs
   useEffect(() => {
+    if (!user) return;
     async function cargar() {
       try {
         const q = query(collection(db, "audit_logs"), orderBy("timestamp", "desc"));
@@ -53,34 +53,31 @@ export default function Auditoria() {
         setLoading(false);
       }
     }
-    if (user) cargar();
+    cargar();
   }, [user]);
 
-  // Filtrar en frontend
   const logsFiltrados = logs.filter(l => {
-    if (filtroAccion  && l.accion  !== filtroAccion)                          return false;
+    if (filtroAccion  && l.accion  !== filtroAccion)                                      return false;
     if (filtroUsuario && !l.usuario.toLowerCase().includes(filtroUsuario.toLowerCase())) return false;
     return true;
   });
 
-  function formatFecha(timestamp: any) {
+  function formatFecha(timestamp: any): string {
     if (!timestamp) return "—";
     const fecha = timestamp.toDate?.() ?? new Date(timestamp);
     return fecha.toLocaleString("es-CL");
   }
 
   const selectStyle: React.CSSProperties = {
-    background: "rgba(255,255,255,0.05)",
-    border: "1px solid rgba(255,255,255,0.1)",
-    borderRadius: 8, padding: "7px 12px",
-    color: "#e8e8f0", fontSize: 13, fontFamily: "inherit", cursor: "pointer",
+    background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)",
+    borderRadius: 8, padding: "7px 12px", color: "#e8e8f0",
+    fontSize: 13, fontFamily: "inherit", cursor: "pointer",
   };
 
   const inputStyle: React.CSSProperties = {
-    background: "rgba(255,255,255,0.05)",
-    border: "1px solid rgba(255,255,255,0.1)",
-    borderRadius: 8, padding: "7px 12px",
-    color: "#e8e8f0", fontSize: 13, fontFamily: "inherit",
+    background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)",
+    borderRadius: 8, padding: "7px 12px", color: "#e8e8f0",
+    fontSize: 13, fontFamily: "inherit",
   };
 
   if (authLoading || loading) return (
@@ -92,7 +89,6 @@ export default function Auditoria() {
   return (
     <div style={{ minHeight: "100vh", background: "#0a0a0f", color: "#f0f0f5", fontFamily: "DM Sans, sans-serif" }}>
 
-      {/* Navbar */}
       <nav style={{
         borderBottom: "1px solid rgba(255,255,255,0.07)", padding: "0 2rem",
         display: "flex", alignItems: "center", justifyContent: "space-between",
@@ -144,7 +140,7 @@ export default function Auditoria() {
           </div>
         </div>
 
-        {/* Tabla de logs */}
+        {/* Tabla */}
         <div style={{
           background: "rgba(15,15,22,0.85)", border: "1px solid rgba(255,255,255,0.07)",
           borderRadius: 12, overflow: "hidden",
@@ -175,21 +171,16 @@ export default function Auditoria() {
                     <td style={{ padding: "12px 16px", fontSize: 12, color: "#9999bb", whiteSpace: "nowrap" }}>
                       {formatFecha(log.timestamp)}
                     </td>
-                    <td style={{ padding: "12px 16px", fontSize: 13, fontWeight: 500 }}>
-                      {log.usuario}
-                    </td>
+                    <td style={{ padding: "12px 16px", fontSize: 13, fontWeight: 500 }}>{log.usuario}</td>
                     <td style={{ padding: "12px 16px" }}>
                       <span style={{
                         background: `${colorAccion[log.accion] || "#888"}22`,
                         border: `1px solid ${colorAccion[log.accion] || "#888"}44`,
                         color: colorAccion[log.accion] || "#888",
-                        borderRadius: 100, padding: "3px 10px", fontSize: 11,
-                        whiteSpace: "nowrap",
+                        borderRadius: 100, padding: "3px 10px", fontSize: 11, whiteSpace: "nowrap",
                       }}>{log.accion.replace(/_/g, " ")}</span>
                     </td>
-                    <td style={{ padding: "12px 16px", fontSize: 13, color: "#9999bb" }}>
-                      {log.detalle}
-                    </td>
+                    <td style={{ padding: "12px 16px", fontSize: 13, color: "#9999bb" }}>{log.detalle}</td>
                   </tr>
                 ))}
               </tbody>

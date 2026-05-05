@@ -47,19 +47,27 @@ const colorEstado: Record<string, string> = {
 };
 
 async function registrarAuditoria(usuario: string, accion: string, detalle: string) {
-  await addDoc(collection(db, "audit_logs"), {
-    usuario, accion, detalle, timestamp: serverTimestamp(),
-  });
+  try {
+    await addDoc(collection(db, "audit_logs"), {
+      usuario, accion, detalle, timestamp: serverTimestamp(),
+    });
+  } catch (e) {
+    console.error("Error registrando auditoría:", e);
+  }
 }
 
 async function registrarHistorial(
   findingId: string, campo: string,
   valorAnterior: string, valorNuevo: string, modificadoPor: string
 ) {
-  await addDoc(collection(db, "finding_history"), {
-    findingId, campo, valorAnterior, valorNuevo,
-    modificadoPor, fecha: serverTimestamp(),
-  });
+  try {
+    await addDoc(collection(db, "finding_history"), {
+      findingId, campo, valorAnterior, valorNuevo,
+      modificadoPor, fecha: serverTimestamp(),
+    });
+  } catch (e) {
+    console.error("Error registrando historial:", e);
+  }
 }
 
 export default function DetalleHallazgo() {
@@ -75,21 +83,21 @@ export default function DetalleHallazgo() {
   const [editando,  setEditando]  = useState(false);
   const [mensaje,   setMensaje]   = useState<string | null>(null);
 
-  // Estado editable
-  const [estadoEdit,    setEstadoEdit]    = useState<Estado>("Nuevo");
-  const [descripEdit,   setDescripEdit]   = useState("");
-  const [recomendEdit,  setRecomendEdit]  = useState("");
+  const [estadoEdit,   setEstadoEdit]   = useState<Estado>("Nuevo");
+  const [descripEdit,  setDescripEdit]  = useState("");
+  const [recomendEdit, setRecomendEdit] = useState("");
 
-  // Protección de ruta
+  // ── Permiso de edición: admin o creador del hallazgo ─────
+  const puedeEditar = rol === "admin" || hallazgo?.nombreCreador === nombre;
+
   useEffect(() => {
     if (!authLoading && !user) router.push("/login");
-  }, [user, authLoading]);
+  }, [user, authLoading, router]);
 
-  // Cargar hallazgo e historial
   useEffect(() => {
+    if (!user || !id) return;
     async function cargar() {
       try {
-        // Hallazgo
         const snap = await getDoc(doc(db, "findings", id));
         if (!snap.exists()) { router.push("/panel-admin/hallazgos"); return; }
         const data = { id: snap.id, ...snap.data() } as Hallazgo;
@@ -98,7 +106,6 @@ export default function DetalleHallazgo() {
         setDescripEdit(data.descripcion);
         setRecomendEdit(data.recomendacion);
 
-        // Historial
         const q = query(
           collection(db, "finding_history"),
           where("findingId", "==", id),
@@ -112,18 +119,16 @@ export default function DetalleHallazgo() {
         setLoading(false);
       }
     }
-    if (user && id) cargar();
-  }, [user, id]);
+    cargar();
+  }, [user, id, router]);
 
-  // Guardar cambios
   async function handleGuardar() {
     if (!hallazgo || !user) return;
     setGuardando(true);
     try {
       const cambios: Record<string, any> = { actualizadoEn: serverTimestamp() };
-      const promesas: Promise<any>[] = [];
+      const promesas: Promise<any>[]     = [];
 
-      // Detectar qué cambió y registrar en historial
       if (estadoEdit !== hallazgo.estado) {
         cambios.estado = estadoEdit;
         promesas.push(registrarHistorial(id, "estado", hallazgo.estado, estadoEdit, nombre ?? user.uid));
@@ -142,28 +147,36 @@ export default function DetalleHallazgo() {
       if (Object.keys(cambios).length > 1) {
         await updateDoc(doc(db, "findings", id), cambios);
         await Promise.all(promesas);
+
         if (descripEdit.trim() !== hallazgo.descripcion || recomendEdit.trim() !== hallazgo.recomendacion) {
           await registrarAuditoria(nombre ?? user.uid, "EDITAR_HALLAZGO", `Hallazgo editado — ID: ${id}`);
         }
-        // Recargar historial
+
         const q = query(collection(db, "finding_history"), where("findingId", "==", id), orderBy("fecha", "desc"));
         const snapH = await getDocs(q);
         setHistorial(snapH.docs.map(d => ({ id: d.id, ...d.data() })) as HistorialItem[]);
-        setHallazgo(prev => prev ? { ...prev, estado: estadoEdit, descripcion: descripEdit.trim(), recomendacion: recomendEdit.trim() } : prev);
+        setHallazgo(prev => prev ? {
+          ...prev,
+          estado:       estadoEdit,
+          descripcion:  descripEdit.trim(),
+          recomendacion: recomendEdit.trim(),
+        } : prev);
         setMensaje("Cambios guardados correctamente.");
       } else {
         setMensaje("No hay cambios que guardar.");
       }
       setEditando(false);
     } catch (e) {
-  console.error(e);
-  const msg = (e as any)?.message ?? "";
-  if (msg.includes("index")) {
-    setMensaje("Cambios guardados. Crea el índice en Firebase para ver el historial.");
-  } else {
-    setMensaje("Error al guardar cambios.");
-  }
-}
+      console.error(e);
+      const msg = (e as any)?.message ?? "";
+      setMensaje(
+        msg.includes("index")
+          ? "Cambios guardados. Crea el índice en Firebase para ver el historial."
+          : "Error al guardar cambios."
+      );
+    } finally {
+      setGuardando(false);
+    }
   }
 
   const inputStyle: React.CSSProperties = {
@@ -212,7 +225,6 @@ export default function DetalleHallazgo() {
 
       <main style={{ padding: "2rem", maxWidth: 900, margin: "0 auto" }}>
 
-        {/* Mensaje de éxito/error */}
         {mensaje && (
           <div style={{
             background: mensaje.includes("Error") ? "rgba(239,68,68,0.08)" : "rgba(16,185,129,0.08)",
@@ -223,48 +235,31 @@ export default function DetalleHallazgo() {
           }}>{mensaje}</div>
         )}
 
-        {/* Card principal */}
         <div style={{
           background: "rgba(15,15,22,0.85)", border: "1px solid rgba(255,255,255,0.07)",
           borderRadius: 14, padding: "2rem", marginBottom: "1.5rem",
         }}>
-          {/* Header */}
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "1.5rem" }}>
             <div>
               <p style={{ fontSize: 11, color: "#6b6b94", letterSpacing: "0.07em", textTransform: "uppercase", marginBottom: 6 }}>ID del hallazgo</p>
               <p style={{ fontSize: 12, color: "#a5b4fc", fontFamily: "monospace" }}>{hallazgo.id}</p>
             </div>
-            <div style={{ display: "flex", gap: "8px" }}>
-              <span style={{
-                background: `${colorSeveridad[hallazgo.severidad]}22`,
-                border: `1px solid ${colorSeveridad[hallazgo.severidad]}44`,
-                color: colorSeveridad[hallazgo.severidad],
-                borderRadius: 100, padding: "4px 14px", fontSize: 13,
-              }}>{hallazgo.severidad}</span>
-            </div>
+            <span style={{
+              background: `${colorSeveridad[hallazgo.severidad]}22`,
+              border: `1px solid ${colorSeveridad[hallazgo.severidad]}44`,
+              color: colorSeveridad[hallazgo.severidad],
+              borderRadius: 100, padding: "4px 14px", fontSize: 13,
+            }}>{hallazgo.severidad}</span>
           </div>
 
-          {/* Grid de datos */}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1.5rem", marginBottom: "1.5rem" }}>
-            <div>
-              <p style={labelStyle}>Fecha</p>
-              <p style={{ fontSize: 14 }}>{hallazgo.fecha}</p>
-            </div>
-            <div>
-              <p style={labelStyle}>Activo afectado</p>
-              <p style={{ fontSize: 14, fontWeight: 600 }}>{hallazgo.activo}</p>
-            </div>
-            <div>
-              <p style={labelStyle}>Tipo de vulnerabilidad</p>
-              <p style={{ fontSize: 14 }}>{hallazgo.tipo}</p>
-            </div>
-            <div>
-              <p style={labelStyle}>Creado por</p>
-              <p style={{ fontSize: 14 }}>{hallazgo.nombreCreador}</p>
-            </div>
+            <div><p style={labelStyle}>Fecha</p><p style={{ fontSize: 14 }}>{hallazgo.fecha}</p></div>
+            <div><p style={labelStyle}>Activo afectado</p><p style={{ fontSize: 14, fontWeight: 600 }}>{hallazgo.activo}</p></div>
+            <div><p style={labelStyle}>Tipo de vulnerabilidad</p><p style={{ fontSize: 14 }}>{hallazgo.tipo}</p></div>
+            <div><p style={labelStyle}>Creado por</p><p style={{ fontSize: 14 }}>{hallazgo.nombreCreador}</p></div>
           </div>
 
-          {/* Estado — editable */}
+          {/* Estado */}
           <div style={{ marginBottom: "1.5rem" }}>
             <p style={labelStyle}>Estado</p>
             {editando ? (
@@ -285,7 +280,7 @@ export default function DetalleHallazgo() {
             )}
           </div>
 
-          {/* Descripción — editable */}
+          {/* Descripción */}
           <div style={{ marginBottom: "1.5rem" }}>
             <p style={labelStyle}>Descripción técnica</p>
             {editando ? (
@@ -296,13 +291,13 @@ export default function DetalleHallazgo() {
             )}
           </div>
 
-          {/* Evidencia — solo lectura */}
+          {/* Evidencia — solo lectura siempre */}
           <div style={{ marginBottom: "1.5rem" }}>
             <p style={labelStyle}>Evidencia</p>
             <p style={{ fontSize: 14, color: "#c0c0d8", lineHeight: 1.7 }}>{hallazgo.evidencia}</p>
           </div>
 
-          {/* Recomendación — editable */}
+          {/* Recomendación */}
           <div style={{ marginBottom: "1.5rem" }}>
             <p style={labelStyle}>Recomendación de remediación</p>
             {editando ? (
@@ -313,11 +308,16 @@ export default function DetalleHallazgo() {
             )}
           </div>
 
-          {/* Botones */}
+          {/* Botones — solo si puede editar */}
           <div style={{ display: "flex", gap: "1rem", justifyContent: "flex-end" }}>
             {editando ? (
               <>
-                <button onClick={() => { setEditando(false); setEstadoEdit(hallazgo.estado); setDescripEdit(hallazgo.descripcion); setRecomendEdit(hallazgo.recomendacion); }} style={{
+                <button onClick={() => {
+                  setEditando(false);
+                  setEstadoEdit(hallazgo.estado);
+                  setDescripEdit(hallazgo.descripcion);
+                  setRecomendEdit(hallazgo.recomendacion);
+                }} style={{
                   background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)",
                   borderRadius: 10, padding: "9px 20px", color: "#e8e8f0",
                   fontSize: 14, cursor: "pointer", fontFamily: "inherit",
@@ -330,16 +330,19 @@ export default function DetalleHallazgo() {
                 }}>{guardando ? "Guardando..." : "Guardar cambios"}</button>
               </>
             ) : (
-              <button onClick={() => setEditando(true)} style={{
-                background: "rgba(99,102,241,0.1)", border: "1px solid rgba(99,102,241,0.2)",
-                borderRadius: 10, padding: "9px 20px", color: "#a5b4fc",
-                fontSize: 14, cursor: "pointer", fontFamily: "inherit",
-              }}>✏️ Editar</button>
+              // ← Solo muestra el botón si es admin o el creador
+              puedeEditar && (
+                <button onClick={() => setEditando(true)} style={{
+                  background: "rgba(99,102,241,0.1)", border: "1px solid rgba(99,102,241,0.2)",
+                  borderRadius: 10, padding: "9px 20px", color: "#a5b4fc",
+                  fontSize: 14, cursor: "pointer", fontFamily: "inherit",
+                }}>✏️ Editar</button>
+              )
             )}
           </div>
         </div>
 
-        {/* Historial de cambios */}
+        {/* Historial */}
         <div style={{
           background: "rgba(15,15,22,0.85)", border: "1px solid rgba(255,255,255,0.07)",
           borderRadius: 14, overflow: "hidden",
@@ -379,7 +382,6 @@ export default function DetalleHallazgo() {
             </table>
           )}
         </div>
-
       </main>
     </div>
   );

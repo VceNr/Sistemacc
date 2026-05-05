@@ -1,6 +1,5 @@
-import { db } from "@/lib/firebase";
+import { auth, db } from "@/lib/firebase"; // ← usa el auth exportado, no getAuth()
 import {
-  getAuth,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   signOut,
@@ -12,10 +11,9 @@ import {
   getDocs,
   setDoc,
   doc,
+  addDoc,
   serverTimestamp,
 } from "firebase/firestore";
-
-const auth = getAuth();
 
 // ── Helpers de cookie ─────────────────────────────────────────
 function setCookie(name: string, value: string, seconds: number) {
@@ -30,13 +28,23 @@ function removeCookie(name: string) {
   document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;`;
 }
 
+// ── Auditoría interna ─────────────────────────────────────────
+async function registrarAuditoria(usuario: string, accion: string, detalle: string) {
+  try {
+    await addDoc(collection(db, "audit_logs"), {
+      usuario, accion, detalle, timestamp: serverTimestamp(),
+    });
+  } catch (e) {
+    console.error("Error registrando auditoría:", e);
+  }
+}
+
 // ── Login ─────────────────────────────────────────────────────
 export async function loginUser(email: string, password: string) {
   try {
     const userCredential = await signInWithEmailAndPassword(auth, email, password);
     const user = userCredential.user;
 
-    // Buscar usuario en Firestore por UID
     const q = query(collection(db, "users"), where("uid", "==", user.uid));
     const snapshot = await getDocs(q);
 
@@ -50,18 +58,15 @@ export async function loginUser(email: string, password: string) {
       return { success: false, message: "Esta cuenta está inactiva." };
     }
 
-    // Guardar token y rol en cookies
     setCookie("token", user.uid,       3600);
     setCookie("rol",   userData.cargo, 3600);
 
-    // Redirigir según cargo
-    let redirectRoute = "/dashboard";
-    if (userData.cargo === "admin")    redirectRoute = "/panel-admin";
-    if (userData.cargo === "analista") redirectRoute = "/panel-admin";
+    // Registrar login en auditoría
+    await registrarAuditoria(userData.nombre ?? email, "LOGIN", `Inicio de sesión — cargo: ${userData.cargo}`);
 
     return {
-      success: true,
-      redirectUrl: redirectRoute,
+      success:     true,
+      redirectUrl: "/panel-admin",
       data: {
         uid:    userData.uid,
         correo: userData.correo,
@@ -117,8 +122,12 @@ export async function registerUser(
 }
 
 // ── Logout ────────────────────────────────────────────────────
-export async function logoutUser() {
+export async function logoutUser(nombre?: string) {
   try {
+    // Registrar logout antes de cerrar sesión
+    if (nombre) {
+      await registrarAuditoria(nombre, "LOGOUT", "Cierre de sesión");
+    }
     await signOut(auth);
     removeCookie("token");
     removeCookie("rol");

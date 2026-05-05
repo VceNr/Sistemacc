@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { collection, getDocs, query, orderBy, limit } from "firebase/firestore";
+import { collection, getDocs, query, orderBy } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/lib/auth-context";
 import { logoutUser } from "@/lib/api";
@@ -14,7 +14,6 @@ interface Hallazgo {
   tipo:      string;
   severidad: string;
   estado:    string;
-  nombreCreador: string;
 }
 
 const colorSeveridad: Record<string, string> = {
@@ -32,19 +31,16 @@ export default function PanelAdmin() {
   const { user, rol, nombre, loading: authLoading } = useAuth();
   const router = useRouter();
 
-  const [hallazgos,  setHallazgos]  = useState<Hallazgo[]>([]);
-  const [loading,    setLoading]    = useState(true);
+  const [hallazgos, setHallazgos] = useState<Hallazgo[]>([]);
+  const [loading,   setLoading]   = useState(true);
 
-  // Protección de ruta
+  // Protección de ruta — proxy ya lo hace en servidor, esto es por si acaso en cliente
   useEffect(() => {
-    if (!authLoading) {
-      if (!user) router.push("/login");
-      if (rol !== null && rol !== "analista") router.push("/panel-admin");
-    }
-  }, [user, rol, authLoading]);
+    if (!authLoading && !user) router.push("/login");
+  }, [user, authLoading, router]);
 
-  // Cargar hallazgos
   useEffect(() => {
+    if (!user) return;
     async function cargar() {
       try {
         const q = query(collection(db, "findings"), orderBy("creadoEn", "desc"));
@@ -56,20 +52,19 @@ export default function PanelAdmin() {
         setLoading(false);
       }
     }
-    if (user) cargar();
+    cargar();
   }, [user]);
 
   async function handleLogout() {
-    await logoutUser();
+    await logoutUser(nombre ?? undefined);
     router.push("/login");
   }
 
-  // Estadísticas calculadas
-  const total        = hallazgos.length;
-  const criticos     = hallazgos.filter(h => h.severidad === "Crítica").length;
+  const total         = hallazgos.length;
+  const criticos      = hallazgos.filter(h => h.severidad === "Crítica").length;
   const enRemediacion = hallazgos.filter(h => h.estado === "En remediación").length;
-  const cerrados     = hallazgos.filter(h => h.estado === "Cerrado").length;
-  const recientes    = hallazgos.slice(0, 5); // últimos 5
+  const cerrados      = hallazgos.filter(h => h.estado === "Cerrado").length;
+  const recientes     = hallazgos.slice(0, 5);
 
   if (authLoading || loading) return (
     <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#0a0a0f", color: "#818cf8" }}>
@@ -95,10 +90,12 @@ export default function PanelAdmin() {
             fontSize: 14, fontWeight: 700,
           }}>S</div>
           <span style={{ fontWeight: 600, fontSize: 15 }}>SistemaCC</span>
+          {/* Badge dinámico según rol real */}
           <span style={{
             background: "rgba(99,102,241,0.15)", border: "1px solid rgba(99,102,241,0.3)",
             borderRadius: 100, padding: "2px 10px", fontSize: 11, color: "#a5b4fc",
-          }}>ADMIN</span>
+            textTransform: "uppercase",
+          }}>{rol ?? "usuario"}</span>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
           <span style={{ fontSize: 13, color: "#64648a" }}>
@@ -114,13 +111,12 @@ export default function PanelAdmin() {
 
       <main style={{ padding: "2.5rem 2rem", maxWidth: 1200, margin: "0 auto" }}>
 
-        {/* Título */}
         <div style={{ marginBottom: "2rem" }}>
-          <h1 style={{ fontSize: 28, fontWeight: 700, marginBottom: 6 }}>Panel de Administración</h1>
+          <h1 style={{ fontSize: 28, fontWeight: 700, marginBottom: 6 }}>Panel de Control</h1>
           <p style={{ color: "#64648a", fontSize: 14 }}>Gestión de hallazgos de seguridad — Infopuntos</p>
         </div>
 
-        {/* Cards estadísticas con números reales */}
+        {/* Cards */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "1rem", marginBottom: "2rem" }}>
           {[
             { label: "Total hallazgos",  valor: total,         color: "#6366f1" },
@@ -138,7 +134,7 @@ export default function PanelAdmin() {
           ))}
         </div>
 
-        {/* Acciones rápidas */}
+        {/* Acciones */}
         <div style={{ display: "flex", gap: "1rem", marginBottom: "2rem" }}>
           <button onClick={() => router.push("/panel-admin/hallazgos/nuevo")} style={{
             background: "linear-gradient(135deg, #6366f1, #818cf8)", border: "none",
@@ -151,6 +147,7 @@ export default function PanelAdmin() {
             borderRadius: 10, padding: "10px 20px", color: "#e8e8f0",
             fontSize: 14, cursor: "pointer", fontFamily: "inherit",
           }}>Ver todos los hallazgos</button>
+          {/* Auditoría solo visible para admin */}
           {rol === "admin" && (
             <button onClick={() => router.push("/panel-admin/auditoria")} style={{
               background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)",
@@ -160,7 +157,7 @@ export default function PanelAdmin() {
           )}
         </div>
 
-        {/* Hallazgos recientes — últimos 5 */}
+        {/* Tabla recientes */}
         <div style={{
           background: "rgba(15,15,22,0.85)", border: "1px solid rgba(255,255,255,0.07)",
           borderRadius: 12, overflow: "hidden",
@@ -179,7 +176,6 @@ export default function PanelAdmin() {
           {recientes.length === 0 ? (
             <div style={{ padding: "3rem", textAlign: "center", color: "#44445e" }}>
               <p style={{ fontSize: 14 }}>No hay hallazgos registrados aún.</p>
-              <p style={{ fontSize: 12, marginTop: 6 }}>Crea el primero con el botón "Nuevo hallazgo"</p>
             </div>
           ) : (
             <table style={{ width: "100%", borderCollapse: "collapse" }}>
