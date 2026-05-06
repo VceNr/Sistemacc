@@ -155,6 +155,13 @@ export default function PanelAdmin() {
               fontSize: 14, cursor: "pointer", fontFamily: "inherit",
             }}>Ver auditoría</button>
           )}
+                    {rol === "admin" && (
+            <button onClick={() => router.push("/panel-admin/register")} style={{
+              background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)",
+              borderRadius: 10, padding: "10px 20px", color: "#e8e8f0",
+              fontSize: 14, cursor: "pointer", fontFamily: "inherit",
+            }}>Crear Usuario</button>
+          )}
         </div>
 
         {/* Tabla recientes */}

@@ -13,17 +13,18 @@ type Severidad = "Crítica" | "Alta" | "Media" | "Baja";
 type Estado    = "Nuevo" | "En análisis" | "En remediación" | "Mitigado" | "Cerrado";
 
 interface Hallazgo {
-  id:            string;
-  fecha:         string;
-  activo:        string;
-  tipo:          string;
-  severidad:     Severidad;
-  estado:        Estado;
-  descripcion:   string;
-  evidencia:     string;
-  recomendacion: string;
-  nombreCreador: string;
-  creadoEn:      any;
+  id:                 string;
+  fecha:              string;
+  activo:             string;
+  tipo:               string;
+  severidad:          Severidad;
+  estado:             Estado;
+  descripcion:        string;
+  evidencia:          string;
+  imagenesEvidencia:  string[]; // ← URLs de Firebase Storage
+  recomendacion:      string;
+  nombreCreador:      string;
+  creadoEn:           any;
 }
 
 interface HistorialItem {
@@ -76,18 +77,18 @@ export default function DetalleHallazgo() {
   const params = useParams();
   const id     = params.id as string;
 
-  const [hallazgo,  setHallazgo]  = useState<Hallazgo | null>(null);
-  const [historial, setHistorial] = useState<HistorialItem[]>([]);
-  const [loading,   setLoading]   = useState(true);
-  const [guardando, setGuardando] = useState(false);
-  const [editando,  setEditando]  = useState(false);
-  const [mensaje,   setMensaje]   = useState<string | null>(null);
+  const [hallazgo,      setHallazgo]      = useState<Hallazgo | null>(null);
+  const [historial,     setHistorial]     = useState<HistorialItem[]>([]);
+  const [loading,       setLoading]       = useState(true);
+  const [guardando,     setGuardando]     = useState(false);
+  const [editando,      setEditando]      = useState(false);
+  const [mensaje,       setMensaje]       = useState<string | null>(null);
+  const [imagenAbierta, setImagenAbierta] = useState<string | null>(null); // lightbox
 
   const [estadoEdit,   setEstadoEdit]   = useState<Estado>("Nuevo");
   const [descripEdit,  setDescripEdit]  = useState("");
   const [recomendEdit, setRecomendEdit] = useState("");
 
-  // ── Permiso de edición: admin o creador del hallazgo ─────
   const puedeEditar = rol === "admin" || hallazgo?.nombreCreador === nombre;
 
   useEffect(() => {
@@ -157,8 +158,8 @@ export default function DetalleHallazgo() {
         setHistorial(snapH.docs.map(d => ({ id: d.id, ...d.data() })) as HistorialItem[]);
         setHallazgo(prev => prev ? {
           ...prev,
-          estado:       estadoEdit,
-          descripcion:  descripEdit.trim(),
+          estado:        estadoEdit,
+          descripcion:   descripEdit.trim(),
           recomendacion: recomendEdit.trim(),
         } : prev);
         setMensaje("Cambios guardados correctamente.");
@@ -203,6 +204,33 @@ export default function DetalleHallazgo() {
   return (
     <div style={{ minHeight: "100vh", background: "#0a0a0f", color: "#f0f0f5", fontFamily: "DM Sans, sans-serif" }}>
 
+      {/* Lightbox */}
+      {imagenAbierta && (
+        <div
+          onClick={() => setImagenAbierta(null)}
+          style={{
+            position: "fixed", inset: 0, zIndex: 100,
+            background: "rgba(0,0,0,0.85)", display: "flex",
+            alignItems: "center", justifyContent: "center", cursor: "zoom-out",
+          }}
+        >
+          <img
+            src={imagenAbierta}
+            alt="Evidencia ampliada"
+            style={{ maxWidth: "90vw", maxHeight: "90vh", borderRadius: 12, objectFit: "contain" }}
+          />
+          <button
+            onClick={() => setImagenAbierta(null)}
+            style={{
+              position: "absolute", top: 20, right: 24,
+              background: "rgba(255,255,255,0.1)", border: "none",
+              borderRadius: "50%", width: 36, height: 36,
+              color: "#fff", fontSize: 18, cursor: "pointer",
+            }}
+          >✕</button>
+        </div>
+      )}
+
       {/* Navbar */}
       <nav style={{
         borderBottom: "1px solid rgba(255,255,255,0.07)", padding: "0 2rem",
@@ -239,6 +267,8 @@ export default function DetalleHallazgo() {
           background: "rgba(15,15,22,0.85)", border: "1px solid rgba(255,255,255,0.07)",
           borderRadius: 14, padding: "2rem", marginBottom: "1.5rem",
         }}>
+
+          {/* Header */}
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "1.5rem" }}>
             <div>
               <p style={{ fontSize: 11, color: "#6b6b94", letterSpacing: "0.07em", textTransform: "uppercase", marginBottom: 6 }}>ID del hallazgo</p>
@@ -252,6 +282,7 @@ export default function DetalleHallazgo() {
             }}>{hallazgo.severidad}</span>
           </div>
 
+          {/* Grid datos */}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1.5rem", marginBottom: "1.5rem" }}>
             <div><p style={labelStyle}>Fecha</p><p style={{ fontSize: 14 }}>{hallazgo.fecha}</p></div>
             <div><p style={labelStyle}>Activo afectado</p><p style={{ fontSize: 14, fontWeight: 600 }}>{hallazgo.activo}</p></div>
@@ -291,10 +322,52 @@ export default function DetalleHallazgo() {
             )}
           </div>
 
-          {/* Evidencia — solo lectura siempre */}
+          {/* Evidencia — texto + imágenes */}
           <div style={{ marginBottom: "1.5rem" }}>
             <p style={labelStyle}>Evidencia</p>
-            <p style={{ fontSize: 14, color: "#c0c0d8", lineHeight: 1.7 }}>{hallazgo.evidencia}</p>
+
+            {/* Texto de evidencia */}
+            {hallazgo.evidencia && (
+              <p style={{ fontSize: 14, color: "#c0c0d8", lineHeight: 1.7, marginBottom: 12 }}>
+                {hallazgo.evidencia}
+              </p>
+            )}
+
+            {/* Imágenes de evidencia */}
+            {hallazgo.imagenesEvidencia?.length > 0 ? (
+              <div>
+                <p style={{ fontSize: 11, color: "#6b6b94", marginBottom: 8 }}>
+                  {hallazgo.imagenesEvidencia.length} imagen{hallazgo.imagenesEvidencia.length > 1 ? "es" : ""} adjunta{hallazgo.imagenesEvidencia.length > 1 ? "s" : ""}
+                </p>
+                <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                  {hallazgo.imagenesEvidencia.map((url, i) => (
+                    <div key={i} style={{ position: "relative", cursor: "zoom-in" }}
+                      onClick={() => setImagenAbierta(url)}>
+                      <img
+                        src={url}
+                        alt={`Evidencia ${i + 1}`}
+                        style={{
+                          width: 110, height: 110, objectFit: "cover",
+                          borderRadius: 8, border: "1px solid rgba(255,255,255,0.1)",
+                          transition: "opacity 0.2s",
+                        }}
+                        onMouseEnter={e => (e.currentTarget.style.opacity = "0.8")}
+                        onMouseLeave={e => (e.currentTarget.style.opacity = "1")}
+                      />
+                      <div style={{
+                        position: "absolute", bottom: 4, right: 4,
+                        background: "rgba(0,0,0,0.5)", borderRadius: 4,
+                        padding: "2px 5px", fontSize: 10, color: "#fff",
+                      }}>🔍</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              !hallazgo.evidencia && (
+                <p style={{ fontSize: 13, color: "#44445e" }}>Sin evidencia registrada.</p>
+              )
+            )}
           </div>
 
           {/* Recomendación */}
@@ -308,7 +381,7 @@ export default function DetalleHallazgo() {
             )}
           </div>
 
-          {/* Botones — solo si puede editar */}
+          {/* Botones */}
           <div style={{ display: "flex", gap: "1rem", justifyContent: "flex-end" }}>
             {editando ? (
               <>
@@ -330,7 +403,6 @@ export default function DetalleHallazgo() {
                 }}>{guardando ? "Guardando..." : "Guardar cambios"}</button>
               </>
             ) : (
-              // ← Solo muestra el botón si es admin o el creador
               puedeEditar && (
                 <button onClick={() => setEditando(true)} style={{
                   background: "rgba(99,102,241,0.1)", border: "1px solid rgba(99,102,241,0.2)",
