@@ -5,8 +5,6 @@ import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Button } from "@/components/ui/button"; // Si no lo usas, lo puedes quitar
-import { Input } from "@/components/ui/input";   // Si no lo usas, lo puedes quitar
 import {
   Form,
   FormControl,
@@ -15,56 +13,56 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
-import { loginUser } from "@/lib/api"; // Asegúrate de que la ruta sea correcta según tu proyecto
+import { registerUser } from "@/lib/api"; // Asegúrate de tener esta función en tu API
 
 // ── Schema de validación ──────────────────────────────────────
-const loginSchema = z.object({
-  email: z.string().email("Ingresa un correo electrónico válido."),
-  password: z
-    .string()
-    .min(8, "La contraseña debe tener al menos 8 caracteres."),
-});
+const registerSchema = z
+  .object({
+    name: z.string().min(2, "El nombre debe tener al menos 2 caracteres."),
+    email: z.string().email("Ingresa un correo electrónico válido."),
+    password: z
+      .string()
+      .min(8, "La contraseña debe tener al menos 8 caracteres."),
+    confirmPassword: z.string(),
+  })
+  .refine((data) => data.password === data.confirmPassword, {
+    message: "Las contraseñas no coinciden.",
+    path: ["confirmPassword"],
+  });
 
-type LoginSchema = z.infer<typeof loginSchema>;
+type RegisterSchema = z.infer<typeof registerSchema>;
 
 // ── Componente ────────────────────────────────────────────────
-export default function LoginForm() {
+export default function RegisterForm() {
   const router = useRouter();
 
-  const form = useForm<LoginSchema>({
-    resolver: zodResolver(loginSchema),
-    defaultValues: { email: "", password: "" },
+  const form = useForm<RegisterSchema>({
+    resolver: zodResolver(registerSchema),
+    defaultValues: { name: "", email: "", password: "", confirmPassword: "" },
   });
 
   const loading = form.formState.isSubmitting;
 
-  async function onSubmit(values: LoginSchema) {
-    // Llamamos a la API que ahora usa Firebase Auth + Firestore
-    const result = await loginUser(values.email, values.password);
+  async function onSubmit(values: RegisterSchema) {
+    // Llamada a la API de registro (ej. Firebase Auth)
+    const result = await registerUser(values.name, values.email, values.password);
 
     if (!result.success) {
-      // Si falla (credenciales incorrectas, inactivo, etc.), mostramos el error
       form.setError("root", { message: result.message });
       return;
     }
 
-    // ¡AQUÍ ESTÁ LA MAGIA! 
-    // Usamos el redirectUrl que viene del backend según el cargo del usuario
-    if (result.redirectUrl) {
-      router.push(result.redirectUrl);
-    } else {
-      // Por si acaso falla la ruta, un fallback de seguridad
-      router.push("/");
-    }
+    // Redirección exitosa (puedes mandarlo al dashboard o al login)
+    router.push("/dashboard");
   }
 
   return (
     <>
-      {/* ── Fuentes ── */}
+      {/* ── Fuentes y Estilos ── */}
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500&display=swap');
 
-        .login-root {
+        .register-root {
           font-family: 'DM Sans', sans-serif;
           min-height: 100vh;
           display: flex;
@@ -80,7 +78,7 @@ export default function LoginForm() {
         }
 
         /* Decoración de fondo */
-        .login-root::before {
+        .register-root::before {
           content: '';
           position: absolute;
           inset: 0;
@@ -92,20 +90,20 @@ export default function LoginForm() {
         }
 
         /* Orb decorativo */
-        .login-orb {
+        .register-orb {
           position: absolute;
           border-radius: 50%;
           filter: blur(80px);
           pointer-events: none;
           animation: orbFloat 8s ease-in-out infinite;
         }
-        .login-orb-1 {
+        .register-orb-1 {
           width: 340px; height: 340px;
           background: rgba(99,102,241,0.12);
           top: -100px; right: -80px;
           animation-delay: 0s;
         }
-        .login-orb-2 {
+        .register-orb-2 {
           width: 240px; height: 240px;
           background: rgba(168,85,247,0.10);
           bottom: -80px; left: -60px;
@@ -113,14 +111,14 @@ export default function LoginForm() {
         }
         @keyframes orbFloat {
           0%, 100% { transform: translateY(0px) scale(1); }
-          50%       { transform: translateY(-20px) scale(1.04); }
+          50%      { transform: translateY(-20px) scale(1.04); }
         }
 
         /* Tarjeta */
-        .login-card {
+        .register-card {
           position: relative;
           width: 100%;
-          max-width: 420px;
+          max-width: 460px; /* Un poco más ancha para el registro */
           background: rgba(15, 15, 22, 0.85);
           backdrop-filter: blur(24px);
           -webkit-backdrop-filter: blur(24px);
@@ -139,7 +137,7 @@ export default function LoginForm() {
         }
 
         /* Badge superior */
-        .login-badge {
+        .register-badge {
           display: inline-flex;
           align-items: center;
           gap: 6px;
@@ -154,7 +152,7 @@ export default function LoginForm() {
           text-transform: uppercase;
           color: #a5b4fc;
         }
-        .login-badge-dot {
+        .register-badge-dot {
           width: 6px; height: 6px;
           border-radius: 50%;
           background: #818cf8;
@@ -162,11 +160,11 @@ export default function LoginForm() {
         }
         @keyframes pulse {
           0%, 100% { opacity: 1; transform: scale(1); }
-          50%       { opacity: 0.5; transform: scale(0.8); }
+          50%      { opacity: 0.5; transform: scale(0.8); }
         }
 
         /* Títulos */
-        .login-title {
+        .register-title {
           font-family: 'Cormorant Garamond', serif;
           font-size: 2.25rem;
           font-weight: 300;
@@ -175,14 +173,14 @@ export default function LoginForm() {
           letter-spacing: -0.01em;
           margin-bottom: 6px;
         }
-        .login-title span {
+        .register-title span {
           font-weight: 600;
           background: linear-gradient(135deg, #a5b4fc 0%, #c4b5fd 100%);
           -webkit-background-clip: text;
           -webkit-text-fill-color: transparent;
           background-clip: text;
         }
-        .login-subtitle {
+        .register-subtitle {
           font-size: 0.84rem;
           color: #64648a;
           margin-bottom: 2rem;
@@ -190,25 +188,39 @@ export default function LoginForm() {
         }
 
         /* Divider */
-        .login-divider {
+        .register-divider {
           height: 1px;
           background: linear-gradient(90deg, transparent, rgba(255,255,255,0.06), transparent);
           margin-bottom: 1.75rem;
         }
 
-        /* Campos */
-        .login-field {
+        /* Campos y Grid */
+        .register-grid {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 1rem;
+        }
+        
+        .register-field {
           margin-bottom: 1.1rem;
           animation: fieldIn 0.5s cubic-bezier(0.22,1,0.36,1) both;
         }
-        .login-field:nth-child(1) { animation-delay: 0.15s; }
-        .login-field:nth-child(2) { animation-delay: 0.25s; }
+        .register-field.full-width {
+          grid-column: 1 / -1;
+        }
+        
+        /* Retrasos en cascada para la animación de entrada */
+        .register-field:nth-child(1) { animation-delay: 0.15s; }
+        .register-field:nth-child(2) { animation-delay: 0.25s; }
+        .register-field:nth-child(3) { animation-delay: 0.35s; }
+        .register-field:nth-child(4) { animation-delay: 0.45s; }
+        
         @keyframes fieldIn {
           from { opacity: 0; transform: translateX(-10px); }
           to   { opacity: 1; transform: translateX(0); }
         }
 
-        .login-label {
+        .register-label {
           display: block;
           font-size: 0.72rem;
           font-weight: 500;
@@ -218,11 +230,11 @@ export default function LoginForm() {
           margin-bottom: 7px;
         }
 
-        .login-input-wrap {
+        .register-input-wrap {
           position: relative;
         }
 
-        .login-input {
+        .register-input {
           width: 100%;
           background: rgba(255,255,255,0.035);
           border: 1px solid rgba(255,255,255,0.08);
@@ -235,15 +247,15 @@ export default function LoginForm() {
           outline: none;
           box-sizing: border-box;
         }
-        .login-input::placeholder { color: #3a3a5c; }
-        .login-input:focus {
+        .register-input::placeholder { color: #3a3a5c; }
+        .register-input:focus {
           border-color: rgba(99,102,241,0.5);
           background: rgba(99,102,241,0.05);
           box-shadow: 0 0 0 3px rgba(99,102,241,0.12);
         }
 
         /* Error global */
-        .login-error {
+        .register-error {
           display: flex;
           align-items: flex-start;
           gap: 8px;
@@ -262,7 +274,7 @@ export default function LoginForm() {
         }
 
         /* Botón principal */
-        .login-btn {
+        .register-btn {
           width: 100%;
           margin-top: 1.5rem;
           padding: 12px;
@@ -280,28 +292,28 @@ export default function LoginForm() {
           transition: opacity 0.2s, transform 0.18s, box-shadow 0.2s;
           box-shadow: 0 4px 20px rgba(99,102,241,0.3);
         }
-        .login-btn::after {
+        .register-btn::after {
           content: '';
           position: absolute;
           inset: 0;
           background: linear-gradient(rgba(255,255,255,0.10), transparent);
           pointer-events: none;
         }
-        .login-btn:hover:not(:disabled) {
+        .register-btn:hover:not(:disabled) {
           opacity: 0.92;
           transform: translateY(-1px);
           box-shadow: 0 8px 28px rgba(99,102,241,0.4);
         }
-        .login-btn:active:not(:disabled) {
+        .register-btn:active:not(:disabled) {
           transform: translateY(0px);
         }
-        .login-btn:disabled {
+        .register-btn:disabled {
           opacity: 0.6;
           cursor: not-allowed;
         }
 
         /* Spinner */
-        .login-spinner {
+        .register-spinner {
           display: inline-block;
           width: 14px; height: 14px;
           border: 2px solid rgba(255,255,255,0.3);
@@ -316,7 +328,7 @@ export default function LoginForm() {
         }
 
         /* Footer */
-        .login-footer {
+        .register-footer {
           text-align: center;
           margin-top: 1.75rem;
           padding-top: 1.5rem;
@@ -324,14 +336,14 @@ export default function LoginForm() {
           font-size: 0.8rem;
           color: #44445e;
         }
-        .login-footer a {
+        .register-footer a {
           color: #818cf8;
           font-weight: 500;
           text-decoration: none;
           position: relative;
           transition: color 0.2s;
         }
-        .login-footer a::after {
+        .register-footer a::after {
           content: '';
           position: absolute;
           bottom: -1px; left: 0; right: 0;
@@ -341,22 +353,8 @@ export default function LoginForm() {
           transform-origin: left;
           transition: transform 0.25s ease;
         }
-        .login-footer a:hover { color: #a5b4fc; }
-        .login-footer a:hover::after { transform: scaleX(1); }
-
-        /* Enlace "olvidé contraseña" */
-        .login-forgot {
-          display: flex;
-          justify-content: flex-end;
-          margin-top: 6px;
-        }
-        .login-forgot a {
-          font-size: 0.75rem;
-          color: #44445e;
-          text-decoration: none;
-          transition: color 0.2s;
-        }
-        .login-forgot a:hover { color: #818cf8; }
+        .register-footer a:hover { color: #a5b4fc; }
+        .register-footer a:hover::after { transform: scaleX(1); }
 
         /* FormMessage override */
         [data-slot="form-message"] {
@@ -364,34 +362,42 @@ export default function LoginForm() {
           color: #f87171 !important;
           margin-top: 5px;
         }
+
+        /* Responsive */
+        @media (max-width: 480px) {
+          .register-grid {
+            grid-template-columns: 1fr;
+            gap: 0;
+          }
+        }
       `}</style>
 
-      <div className="login-root">
+      <div className="register-root">
         {/* Orbs */}
-        <div className="login-orb login-orb-1" />
-        <div className="login-orb login-orb-2" />
+        <div className="register-orb register-orb-1" />
+        <div className="register-orb register-orb-2" />
 
-        <div className="login-card">
+        <div className="register-card">
           {/* Badge */}
-          <div className="login-badge">
-            <span className="login-badge-dot" />
-            Acceso seguro
+          <div className="register-badge">
+            <span className="register-badge-dot" />
+            Nueva Cuenta
           </div>
 
           {/* Header */}
-          <h1 className="login-title">
-            Bienvenido<br />de <span>vuelta.</span>
+          <h1 className="register-title">
+            Únete a<br />la <span>plataforma.</span>
           </h1>
-          <p className="login-subtitle">Ingresa tus credenciales para continuar</p>
+          <p className="register-subtitle">Completa tus datos para comenzar</p>
 
-          <div className="login-divider" />
+          <div className="register-divider" />
 
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} noValidate>
 
               {/* Error global */}
               {form.formState.errors.root && (
-                <div className="login-error">
+                <div className="register-error">
                   <svg width="15" height="15" viewBox="0 0 15 15" fill="none" style={{ flexShrink: 0, marginTop: 1 }}>
                     <circle cx="7.5" cy="7.5" r="7" stroke="#f87171" strokeWidth="1.2"/>
                     <path d="M7.5 4.5v4M7.5 10.5h.01" stroke="#f87171" strokeWidth="1.4" strokeLinecap="round"/>
@@ -400,20 +406,20 @@ export default function LoginForm() {
                 </div>
               )}
 
-              {/* Email */}
-              <div className="login-field">
+              {/* Nombre Completo */}
+              <div className="register-field full-width">
                 <FormField
                   control={form.control}
-                  name="email"
+                  name="name"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="login-label">Correo electrónico</FormLabel>
+                      <FormLabel className="register-label">Nombre Completo</FormLabel>
                       <FormControl>
-                        <div className="login-input-wrap">
+                        <div className="register-input-wrap">
                           <input
-                            type="email"
-                            placeholder="juan@ejemplo.com"
-                            className="login-input"
+                            type="text"
+                            placeholder="Ej. Juan Pérez"
+                            className="register-input"
                             {...field}
                           />
                         </div>
@@ -424,20 +430,20 @@ export default function LoginForm() {
                 />
               </div>
 
-              {/* Contraseña */}
-              <div className="login-field">
+              {/* Email */}
+              <div className="register-field full-width">
                 <FormField
                   control={form.control}
-                  name="password"
+                  name="email"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="login-label">Contraseña</FormLabel>
+                      <FormLabel className="register-label">Correo electrónico</FormLabel>
                       <FormControl>
-                        <div className="login-input-wrap">
+                        <div className="register-input-wrap">
                           <input
-                            type="password"
-                            placeholder="••••••••"
-                            className="login-input"
+                            type="email"
+                            placeholder="operador@logistica.com"
+                            className="register-input"
                             {...field}
                           />
                         </div>
@@ -446,29 +452,73 @@ export default function LoginForm() {
                     </FormItem>
                   )}
                 />
-                <div className="login-forgot">
-                  <Link href="/forgot-password">¿Olvidaste tu contraseña?</Link>
+              </div>
+
+              {/* Contraseñas en Grid (Lado a Lado en Desktop) */}
+              <div className="register-grid">
+                {/* Contraseña */}
+                <div className="register-field">
+                  <FormField
+                    control={form.control}
+                    name="password"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="register-label">Contraseña</FormLabel>
+                        <FormControl>
+                          <div className="register-input-wrap">
+                            <input
+                              type="password"
+                              placeholder="••••••••"
+                              className="register-input"
+                              {...field}
+                            />
+                          </div>
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+
+                {/* Confirmar Contraseña */}
+                <div className="register-field">
+                  <FormField
+                    control={form.control}
+                    name="confirmPassword"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="register-label">Confirmar</FormLabel>
+                        <FormControl>
+                          <div className="register-input-wrap">
+                            <input
+                              type="password"
+                              placeholder="••••••••"
+                              className="register-input"
+                              {...field}
+                            />
+                          </div>
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
                 </div>
               </div>
 
               {/* Submit */}
               <button
                 type="submit"
-                className="login-btn"
+                className="register-btn"
                 disabled={loading}
               >
-                {loading && <span className="login-spinner" />}
-                {loading ? "Verificando..." : "Iniciar sesión"}
+                {loading && <span className="register-spinner" />}
+                {loading ? "Creando cuenta..." : "Crear cuenta"}
               </button>
 
             </form>
           </Form>
 
           {/* Footer */}
-          <div className="login-footer">
-            ¿No tienes cuenta?&nbsp;
-            <Link href="/register">Regístrate aquí</Link>
-          </div>
         </div>
       </div>
     </>
