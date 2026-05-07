@@ -53,7 +53,7 @@ export default function RegisterForm() {
     }
 
     // Redirección exitosa (puedes mandarlo al dashboard o al login)
-    router.push("/dashboard");
+    router.push("/panel-admin");
   }
 
   return (
