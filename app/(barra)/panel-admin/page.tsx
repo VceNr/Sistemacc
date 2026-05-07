@@ -2,19 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { collection, getDocs, query, orderBy } from "firebase/firestore";
-import { db } from "@/lib/firebase";
 import { useAuth } from "@/lib/auth-context";
-import { logoutUser } from "@/lib/api";
-
-interface Hallazgo {
-  id:        string;
-  fecha:     string;
-  activo:    string;
-  tipo:      string;
-  severidad: string;
-  estado:    string;
-}
+import { getHallazgos, logoutUser, type Hallazgo } from "@/lib/api";
 
 const colorSeveridad: Record<string, string> = {
   "Crítica": "#ef4444", "Alta": "#f97316",
@@ -34,25 +23,16 @@ export default function PanelAdmin() {
   const [hallazgos, setHallazgos] = useState<Hallazgo[]>([]);
   const [loading,   setLoading]   = useState(true);
 
-  // Protección de ruta — proxy ya lo hace en servidor, esto es por si acaso en cliente
   useEffect(() => {
     if (!authLoading && !user) router.push("/login");
   }, [user, authLoading, router]);
 
   useEffect(() => {
     if (!user) return;
-    async function cargar() {
-      try {
-        const q = query(collection(db, "findings"), orderBy("creadoEn", "desc"));
-        const snap = await getDocs(q);
-        setHallazgos(snap.docs.map(d => ({ id: d.id, ...d.data() })) as Hallazgo[]);
-      } catch (e) {
-        console.error(e);
-      } finally {
-        setLoading(false);
-      }
-    }
-    cargar();
+    getHallazgos()
+      .then(setHallazgos)
+      .catch(console.error)
+      .finally(() => setLoading(false));
   }, [user]);
 
   async function handleLogout() {
@@ -90,7 +70,6 @@ export default function PanelAdmin() {
             fontSize: 14, fontWeight: 700,
           }}>S</div>
           <span style={{ fontWeight: 600, fontSize: 15 }}>SistemaCC</span>
-          {/* Badge dinámico según rol real */}
           <span style={{
             background: "rgba(99,102,241,0.15)", border: "1px solid rgba(99,102,241,0.3)",
             borderRadius: 100, padding: "2px 10px", fontSize: 11, color: "#a5b4fc",
@@ -147,7 +126,6 @@ export default function PanelAdmin() {
             borderRadius: 10, padding: "10px 20px", color: "#e8e8f0",
             fontSize: 14, cursor: "pointer", fontFamily: "inherit",
           }}>Ver todos los hallazgos</button>
-          {/* Auditoría solo visible para admin */}
           {rol === "admin" && (
             <button onClick={() => router.push("/panel-admin/auditoria")} style={{
               background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)",
@@ -155,7 +133,7 @@ export default function PanelAdmin() {
               fontSize: 14, cursor: "pointer", fontFamily: "inherit",
             }}>Ver auditoría</button>
           )}
-                    {rol === "admin" && (
+          {rol === "admin" && (
             <button onClick={() => router.push("/panel-admin/register")} style={{
               background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)",
               borderRadius: 10, padding: "10px 20px", color: "#e8e8f0",

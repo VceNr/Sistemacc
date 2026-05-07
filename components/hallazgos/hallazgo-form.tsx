@@ -2,26 +2,14 @@
 
 import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { collection, addDoc, serverTimestamp } from "firebase/firestore";
-import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
-import { db, storage } from "@/lib/firebase";
 import { useAuth } from "@/lib/auth-context";
-
-type Severidad = "Crítica" | "Alta" | "Media" | "Baja";
-type Estado    = "Nuevo" | "En análisis" | "En remediación" | "Mitigado" | "Cerrado";
+import {
+  createHallazgo, updateHallazgo, subirImagenesEvidencia, registrarAuditoria,
+  type Severidad, type Estado,
+} from "@/lib/api";
 
 interface HallazgoFormProps {
   redirectUrl: string;
-}
-
-async function registrarAuditoria(usuario: string, accion: string, detalle: string) {
-  try {
-    await addDoc(collection(db, "audit_logs"), {
-      usuario, accion, detalle, timestamp: serverTimestamp(),
-    });
-  } catch (e) {
-    console.error("Error registrando auditoría:", e);
-  }
 }
 
 export default function HallazgoForm({ redirectUrl }: HallazgoFormProps) {
@@ -53,60 +41,36 @@ export default function HallazgoForm({ redirectUrl }: HallazgoFormProps) {
     if (errores[name]) setErrores(prev => ({ ...prev, [name]: "" }));
   }
 
-  // ── Manejo de imágenes ───────────────────────────────────
+  // ── Manejo de imágenes ─────────────────────────────────────
   function handleImagenes(e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files ?? []);
     if (files.length === 0) return;
 
-    // Validar tipo y tamaño (máx 5MB por imagen)
-    const validas = files.filter(f => {
-      if (!f.type.startsWith("image/")) return false;
-      if (f.size > 5 * 1024 * 1024) return false;
-      return true;
-    });
+    const validas = files.filter(f => f.type.startsWith("image/") && f.size <= 5 * 1024 * 1024);
 
     if (validas.length !== files.length) {
       setError("Solo se permiten imágenes de hasta 5MB cada una.");
       return;
     }
 
-    // Máximo 5 imágenes en total
     const nuevas = [...imagenes, ...validas].slice(0, 5);
-    setImagenes(nuevas);
 
-    // Generar previews
-    const urls = nuevas.map(f => URL.createObjectURL(f));
-    setPreviews(urls);
+    // Limpiar previews anteriores antes de crear nuevos
+    previews.forEach(url => URL.revokeObjectURL(url));
+
+    setImagenes(nuevas);
+    setPreviews(nuevas.map(f => URL.createObjectURL(f)));
     setError(null);
   }
 
   function removeImagen(index: number) {
+    URL.revokeObjectURL(previews[index]);
     const nuevas = imagenes.filter((_, i) => i !== index);
     setImagenes(nuevas);
     setPreviews(nuevas.map(f => URL.createObjectURL(f)));
   }
 
-  // ── Subir imágenes a Firebase Storage ───────────────────
-  async function subirImagenes(findingId: string): Promise<string[]> {
-    if (imagenes.length === 0) return [];
-    setUploading(true);
-    try {
-      const urls = await Promise.all(
-        imagenes.map(async (file, i) => {
-          const ext      = file.name.split(".").pop();
-          const path     = `findings/${findingId}/evidencia_${i + 1}_${Date.now()}.${ext}`;
-          const storageRef = ref(storage, path);
-          await uploadBytes(storageRef, file);
-          return getDownloadURL(storageRef);
-        })
-      );
-      return urls;
-    } finally {
-      setUploading(false);
-    }
-  }
-
-  // ── Validación ───────────────────────────────────────────
+  // ── Validación ─────────────────────────────────────────────
   function validar(): boolean {
     const nuevosErrores: Record<string, string> = {};
     if (!form.fecha)         nuevosErrores.fecha         = "La fecha es obligatoria.";
@@ -123,8 +87,8 @@ export default function HallazgoForm({ redirectUrl }: HallazgoFormProps) {
     return Object.keys(nuevosErrores).length === 0;
   }
 
-  // ── Submit ───────────────────────────────────────────────
-  async function handleSubmit(e: React.FormEvent) {
+  // ── Submit ─────────────────────────────────────────────────
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError(null);
     if (!validar()) return;
@@ -135,8 +99,8 @@ export default function HallazgoForm({ redirectUrl }: HallazgoFormProps) {
       const sanitize = (str: string) =>
         str.replace(/</g, "&lt;").replace(/>/g, "&gt;").trim();
 
-      // 1. Crear documento primero para obtener el ID
-      const docRef = await addDoc(collection(db, "findings"), {
+      // 1. Crear el documento y obtener su ID
+      const findingId = await createHallazgo({
         fecha:         form.fecha,
         activo:        sanitize(form.activo),
         tipo:          sanitize(form.tipo),
@@ -144,36 +108,35 @@ export default function HallazgoForm({ redirectUrl }: HallazgoFormProps) {
         descripcion:   sanitize(form.descripcion),
         evidencia:     sanitize(form.evidencia),
         recomendacion: sanitize(form.recomendacion),
-        estado:        "Nuevo" as Estado,
         creadoPor:     user.uid,
         nombreCreador: nombre ?? "Desconocido",
         rolCreador:    rol ?? "analista",
-        imagenesEvidencia: [], // se actualizará abajo
-        creadoEn:      serverTimestamp(),
-        actualizadoEn: serverTimestamp(),
       });
 
-      // 2. Subir imágenes usando el ID del documento como carpeta
-      const imageUrls = await subirImagenes(docRef.id);
+      // 2. Subir imágenes usando el ID como carpeta
+      setUploading(true);
+      const imageUrls = await subirImagenesEvidencia(findingId, imagenes);
+      setUploading(false);
 
       // 3. Actualizar el documento con las URLs de las imágenes
       if (imageUrls.length > 0) {
-        const { updateDoc, doc } = await import("firebase/firestore");
-        await updateDoc(doc(db, "findings", docRef.id), {
-          imagenesEvidencia: imageUrls,
-        });
+        await updateHallazgo(findingId, { imagenesEvidencia: imageUrls });
       }
 
       await registrarAuditoria(
         nombre ?? user.uid,
         "CREAR_HALLAZGO",
-        `Hallazgo creado — ID: ${docRef.id} — Activo: ${form.activo} — Severidad: ${form.severidad} — Imágenes: ${imageUrls.length}`
+        `Hallazgo creado — ID: ${findingId} — Activo: ${form.activo} — Severidad: ${form.severidad} — Imágenes: ${imageUrls.length}`,
       );
+
+      // Limpiar object URLs antes de salir
+      previews.forEach(url => URL.revokeObjectURL(url));
 
       router.push(redirectUrl);
     } catch (err) {
       console.error(err);
       setError("Error al guardar el hallazgo. Intenta de nuevo.");
+      setUploading(false);
     } finally {
       setLoading(false);
     }

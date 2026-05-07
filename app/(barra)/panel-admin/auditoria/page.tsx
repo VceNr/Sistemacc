@@ -2,17 +2,19 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { collection, getDocs, query, orderBy } from "firebase/firestore";
-import { db } from "@/lib/firebase";
 import { useAuth } from "@/lib/auth-context";
+import { getAuditLogs, type LogAuditoria } from "@/lib/api";
 
-interface LogAuditoria {
-  id:        string;
-  usuario:   string;
-  accion:    string;
-  detalle:   string;
-  timestamp: any;
-}
+type Accion = "CREAR_HALLAZGO" | "EDITAR_HALLAZGO" | "ELIMINAR_HALLAZGO" | "CAMBIO_ESTADO" | "LOGIN" | "LOGOUT";
+
+const ACCIONES: { valor: Accion; label: string }[] = [
+  { valor: "CREAR_HALLAZGO",    label: "Crear hallazgo"    },
+  { valor: "EDITAR_HALLAZGO",   label: "Editar hallazgo"   },
+  { valor: "ELIMINAR_HALLAZGO", label: "Eliminar hallazgo" },
+  { valor: "CAMBIO_ESTADO",     label: "Cambio de estado"  },
+  { valor: "LOGIN",             label: "Login"             },
+  { valor: "LOGOUT",            label: "Logout"            },
+];
 
 const colorAccion: Record<string, string> = {
   "CREAR_HALLAZGO":    "#10b981",
@@ -23,44 +25,66 @@ const colorAccion: Record<string, string> = {
   "LOGOUT":            "#6b7280",
 };
 
+interface Filtros {
+  acciones: Set<Accion>;
+  usuario:  string;
+  desde:    string;
+  hasta:    string;
+}
+
+const filtrosVacios = (): Filtros => ({
+  acciones: new Set(),
+  usuario:  "",
+  desde:    "",
+  hasta:    "",
+});
+
 export default function Auditoria() {
   const { user, nombre, rol, loading: authLoading } = useAuth();
   const router = useRouter();
 
-  const [logs,          setLogs]          = useState<LogAuditoria[]>([]);
-  const [loading,       setLoading]       = useState(true);
-  const [filtroAccion,  setFiltroAccion]  = useState("");
-  const [filtroUsuario, setFiltroUsuario] = useState("");
+  const [logs,         setLogs]         = useState<LogAuditoria[]>([]);
+  const [loading,      setLoading]      = useState(true);
+  const [filtros,      setFiltros]      = useState<Filtros>(filtrosVacios());
+  const [panelAbierto, setPanelAbierto] = useState(false);
 
-  // Protección cliente — proxy ya protege en servidor
   useEffect(() => {
     if (!authLoading) {
-      if (!user)             router.push("/login");
-      if (rol && rol !== "admin") router.push("/panel-admin"); // ← redirige al panel único
+      if (!user)              router.push("/login");
+      if (rol && rol !== "admin") router.push("/panel-admin");
     }
   }, [user, rol, authLoading, router]);
 
   useEffect(() => {
     if (!user) return;
-    async function cargar() {
-      try {
-        const q = query(collection(db, "audit_logs"), orderBy("timestamp", "desc"));
-        const snap = await getDocs(q);
-        setLogs(snap.docs.map(d => ({ id: d.id, ...d.data() })) as LogAuditoria[]);
-      } catch (e) {
-        console.error(e);
-      } finally {
-        setLoading(false);
-      }
-    }
-    cargar();
+    getAuditLogs()
+      .then(setLogs)
+      .catch(console.error)
+      .finally(() => setLoading(false));
   }, [user]);
 
+  function toggleAccion(a: Accion) {
+    setFiltros(prev => {
+      const next = new Set(prev.acciones);
+      next.has(a) ? next.delete(a) : next.add(a);
+      return { ...prev, acciones: next };
+    });
+  }
+
   const logsFiltrados = logs.filter(l => {
-    if (filtroAccion  && l.accion  !== filtroAccion)                                      return false;
-    if (filtroUsuario && !l.usuario.toLowerCase().includes(filtroUsuario.toLowerCase())) return false;
+    if (filtros.acciones.size > 0 && !filtros.acciones.has(l.accion as Accion)) return false;
+    if (filtros.usuario && !l.usuario.toLowerCase().includes(filtros.usuario.toLowerCase())) return false;
+    if (filtros.desde || filtros.hasta) {
+      const fecha = l.timestamp?.toDate?.() ?? new Date(l.timestamp);
+      const iso   = fecha.toISOString().split("T")[0];
+      if (filtros.desde && iso < filtros.desde) return false;
+      if (filtros.hasta && iso > filtros.hasta) return false;
+    }
     return true;
   });
+
+  const chipsActivos = filtros.acciones.size + (filtros.usuario ? 1 : 0);
+  const totalActivos = chipsActivos + (filtros.desde ? 1 : 0) + (filtros.hasta ? 1 : 0);
 
   function formatFecha(timestamp: any): string {
     if (!timestamp) return "—";
@@ -68,17 +92,13 @@ export default function Auditoria() {
     return fecha.toLocaleString("es-CL");
   }
 
-  const selectStyle: React.CSSProperties = {
-    background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)",
-    borderRadius: 8, padding: "7px 12px", color: "#e8e8f0",
-    fontSize: 13, fontFamily: "inherit", cursor: "pointer",
-  };
-
-  const inputStyle: React.CSSProperties = {
-    background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)",
-    borderRadius: 8, padding: "7px 12px", color: "#e8e8f0",
-    fontSize: 13, fontFamily: "inherit",
-  };
+  const dateInputStyle = (activo: boolean): React.CSSProperties => ({
+    background: activo ? "rgba(99,102,241,0.08)" : "rgba(255,255,255,0.03)",
+    border: `1px solid ${activo ? "rgba(99,102,241,0.3)" : "rgba(255,255,255,0.08)"}`,
+    borderRadius: 8, padding: "7px 12px",
+    color: "#e8e8f0", fontSize: 13, fontFamily: "inherit",
+    outline: "none", colorScheme: "dark" as any,
+  });
 
   if (authLoading || loading) return (
     <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#0a0a0f", color: "#818cf8" }}>
@@ -114,30 +134,130 @@ export default function Auditoria() {
 
       <main style={{ padding: "2rem", maxWidth: 1200, margin: "0 auto" }}>
 
-        {/* Filtros */}
-        <div style={{
-          background: "rgba(15,15,22,0.85)", border: "1px solid rgba(255,255,255,0.07)",
-          borderRadius: 12, padding: "1.25rem 1.5rem", marginBottom: "1.5rem",
-        }}>
-          <p style={{ fontSize: 12, color: "#6b6b94", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: "1rem" }}>Filtros</p>
-          <div style={{ display: "flex", gap: "1rem", flexWrap: "wrap", alignItems: "center" }}>
-            <select value={filtroAccion} onChange={e => setFiltroAccion(e.target.value)} style={selectStyle}>
-              <option value="">Todas las acciones</option>
-              <option value="CREAR_HALLAZGO">Crear hallazgo</option>
-              <option value="EDITAR_HALLAZGO">Editar hallazgo</option>
-              <option value="ELIMINAR_HALLAZGO">Eliminar hallazgo</option>
-              <option value="CAMBIO_ESTADO">Cambio de estado</option>
-              <option value="LOGIN">Login</option>
-              <option value="LOGOUT">Logout</option>
-            </select>
-            <input placeholder="Buscar usuario..." value={filtroUsuario}
-              onChange={e => setFiltroUsuario(e.target.value)} style={inputStyle} />
-            <button onClick={() => { setFiltroAccion(""); setFiltroUsuario(""); }} style={{
-              background: "none", border: "1px solid rgba(255,255,255,0.1)",
-              borderRadius: 8, padding: "7px 14px", color: "#6b6b94",
-              fontSize: 13, cursor: "pointer", fontFamily: "inherit",
-            }}>Limpiar</button>
+        {/* Barra de controles */}
+        <div style={{ display: "flex", alignItems: "center", gap: "1rem", marginBottom: "1.5rem", flexWrap: "wrap" }}>
+
+          {/* Botón Filtros + dropdown */}
+          <div style={{ position: "relative", zIndex: 30 }}>
+            <button
+              onClick={() => setPanelAbierto(prev => !prev)}
+              style={{
+                display: "flex", alignItems: "center", gap: "8px",
+                background: panelAbierto || chipsActivos > 0 ? "rgba(99,102,241,0.12)" : "rgba(255,255,255,0.05)",
+                border: `1px solid ${panelAbierto || chipsActivos > 0 ? "rgba(99,102,241,0.35)" : "rgba(255,255,255,0.1)"}`,
+                borderRadius: 8, padding: "7px 14px",
+                color: panelAbierto || chipsActivos > 0 ? "#a5b4fc" : "#e8e8f0",
+                fontSize: 13, cursor: "pointer", fontFamily: "inherit", transition: "all 0.15s",
+              }}
+            >
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                <path d="M1 3h12M3 7h8M5 11h4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+              </svg>
+              Filtros
+              {chipsActivos > 0 && (
+                <span style={{
+                  background: "#6366f1", borderRadius: 100,
+                  width: 18, height: 18, fontSize: 10, fontWeight: 700,
+                  display: "flex", alignItems: "center", justifyContent: "center", color: "#fff",
+                }}>{chipsActivos}</span>
+              )}
+              <span style={{
+                fontSize: 10, opacity: 0.6,
+                transform: panelAbierto ? "rotate(180deg)" : "rotate(0deg)",
+                transition: "transform 0.2s", display: "inline-block",
+              }}>▼</span>
+            </button>
+
+            {/* Dropdown flotante */}
+            {panelAbierto && (
+              <div style={{
+                position: "absolute", top: "calc(100% + 8px)", left: 0,
+                background: "rgba(13,13,20,0.98)", border: "1px solid rgba(255,255,255,0.09)",
+                borderRadius: 12, padding: "1.25rem 1.5rem",
+                boxShadow: "0 16px 48px rgba(0,0,0,0.6)",
+                zIndex: 30, minWidth: 420,
+              }}>
+
+                {/* Cabecera */}
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.1rem" }}>
+                  <span style={{ fontSize: 11, color: "#6b6b94", textTransform: "uppercase", letterSpacing: "0.07em" }}>Filtros</span>
+                  {chipsActivos > 0 && (
+                    <button
+                      onClick={() => setFiltros(prev => ({ ...prev, acciones: new Set(), usuario: "" }))}
+                      style={{ background: "none", border: "none", color: "#6b6b94", fontSize: 12, cursor: "pointer", fontFamily: "inherit", padding: 0 }}
+                    >Limpiar</button>
+                  )}
+                </div>
+
+                {/* Acción — chips multi-toggle */}
+                <div style={{ marginBottom: "1rem" }}>
+                  <p style={{ fontSize: 11, color: "#44445e", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: "0.6rem" }}>
+                    Acción
+                  </p>
+                  <div style={{ display: "flex", gap: "7px", flexWrap: "wrap" }}>
+                    {ACCIONES.map(({ valor, label }) => {
+                      const on    = filtros.acciones.has(valor);
+                      const color = colorAccion[valor];
+                      return (
+                        <button key={valor} onClick={() => toggleAccion(valor)} style={{
+                          background: on ? `${color}22` : "rgba(255,255,255,0.03)",
+                          border: `1px solid ${on ? color + "66" : "rgba(255,255,255,0.08)"}`,
+                          borderRadius: 7, padding: "6px 14px",
+                          color: on ? color : "#6b6b94",
+                          fontSize: 13, cursor: "pointer", fontFamily: "inherit",
+                          fontWeight: on ? 600 : 400, transition: "all 0.15s",
+                        }}>
+                          {label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div style={{ height: 1, background: "rgba(255,255,255,0.05)", marginBottom: "1rem" }} />
+
+                {/* Usuario */}
+                <div>
+                  <p style={{ fontSize: 11, color: "#44445e", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: "0.6rem" }}>
+                    Usuario
+                  </p>
+                  <input
+                    placeholder="Buscar usuario..."
+                    value={filtros.usuario}
+                    onChange={e => setFiltros(prev => ({ ...prev, usuario: e.target.value }))}
+                    style={{
+                      width: "100%", boxSizing: "border-box",
+                      background: filtros.usuario ? "rgba(99,102,241,0.08)" : "rgba(255,255,255,0.03)",
+                      border: `1px solid ${filtros.usuario ? "rgba(99,102,241,0.3)" : "rgba(255,255,255,0.08)"}`,
+                      borderRadius: 8, padding: "7px 12px",
+                      color: "#e8e8f0", fontSize: 13, fontFamily: "inherit", outline: "none",
+                    }}
+                  />
+                </div>
+              </div>
+            )}
           </div>
+
+          {/* Fechas — siempre visibles */}
+          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            <span style={{ fontSize: 12, color: "#44445e" }}>Desde</span>
+            <input type="date" value={filtros.desde}
+              onChange={e => setFiltros(prev => ({ ...prev, desde: e.target.value }))}
+              style={dateInputStyle(!!filtros.desde)} />
+            <span style={{ fontSize: 12, color: "#44445e" }}>Hasta</span>
+            <input type="date" value={filtros.hasta}
+              onChange={e => setFiltros(prev => ({ ...prev, hasta: e.target.value }))}
+              style={dateInputStyle(!!filtros.hasta)} />
+          </div>
+
+          {/* Limpiar todo */}
+          {totalActivos > 0 && (
+            <button onClick={() => setFiltros(filtrosVacios())} style={{
+              background: "none", border: "1px solid rgba(255,255,255,0.08)",
+              borderRadius: 8, padding: "7px 12px", color: "#6b6b94",
+              fontSize: 12, cursor: "pointer", fontFamily: "inherit",
+            }}>Limpiar todo</button>
+          )}
         </div>
 
         {/* Tabla */}

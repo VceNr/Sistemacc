@@ -2,39 +2,12 @@
 
 import { useEffect, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
-import {
-  doc, getDoc, updateDoc, serverTimestamp,
-  collection, addDoc, query, where, orderBy, getDocs
-} from "firebase/firestore";
-import { db } from "@/lib/firebase";
 import { useAuth } from "@/lib/auth-context";
-
-type Severidad = "Crítica" | "Alta" | "Media" | "Baja";
-type Estado    = "Nuevo" | "En análisis" | "En remediación" | "Mitigado" | "Cerrado";
-
-interface Hallazgo {
-  id:                 string;
-  fecha:              string;
-  activo:             string;
-  tipo:               string;
-  severidad:          Severidad;
-  estado:             Estado;
-  descripcion:        string;
-  evidencia:          string;
-  imagenesEvidencia:  string[]; // ← URLs de Firebase Storage
-  recomendacion:      string;
-  nombreCreador:      string;
-  creadoEn:           any;
-}
-
-interface HistorialItem {
-  id:            string;
-  campo:         string;
-  valorAnterior: string;
-  valorNuevo:    string;
-  modificadoPor: string;
-  fecha:         any;
-}
+import {
+  getHallazgo, updateHallazgo, getHistorialHallazgo,
+  registrarAuditoria, registrarHistorial,
+  type Hallazgo, type HistorialItem, type Estado,
+} from "@/lib/api";
 
 const colorSeveridad: Record<string, string> = {
   "Crítica": "#ef4444", "Alta": "#f97316",
@@ -46,30 +19,6 @@ const colorEstado: Record<string, string> = {
   "En remediación": "#f59e0b", "Mitigado":       "#10b981",
   "Cerrado":        "#6b7280",
 };
-
-async function registrarAuditoria(usuario: string, accion: string, detalle: string) {
-  try {
-    await addDoc(collection(db, "audit_logs"), {
-      usuario, accion, detalle, timestamp: serverTimestamp(),
-    });
-  } catch (e) {
-    console.error("Error registrando auditoría:", e);
-  }
-}
-
-async function registrarHistorial(
-  findingId: string, campo: string,
-  valorAnterior: string, valorNuevo: string, modificadoPor: string
-) {
-  try {
-    await addDoc(collection(db, "finding_history"), {
-      findingId, campo, valorAnterior, valorNuevo,
-      modificadoPor, fecha: serverTimestamp(),
-    });
-  } catch (e) {
-    console.error("Error registrando historial:", e);
-  }
-}
 
 export default function DetalleHallazgo() {
   const { user, nombre, rol, loading: authLoading } = useAuth();
@@ -83,7 +32,7 @@ export default function DetalleHallazgo() {
   const [guardando,     setGuardando]     = useState(false);
   const [editando,      setEditando]      = useState(false);
   const [mensaje,       setMensaje]       = useState<string | null>(null);
-  const [imagenAbierta, setImagenAbierta] = useState<string | null>(null); // lightbox
+  const [imagenAbierta, setImagenAbierta] = useState<string | null>(null);
 
   const [estadoEdit,   setEstadoEdit]   = useState<Estado>("Nuevo");
   const [descripEdit,  setDescripEdit]  = useState("");
@@ -99,21 +48,15 @@ export default function DetalleHallazgo() {
     if (!user || !id) return;
     async function cargar() {
       try {
-        const snap = await getDoc(doc(db, "findings", id));
-        if (!snap.exists()) { router.push("/panel-admin/hallazgos"); return; }
-        const data = { id: snap.id, ...snap.data() } as Hallazgo;
+        const data = await getHallazgo(id);
+        if (!data) { router.push("/panel-admin/hallazgos"); return; }
         setHallazgo(data);
         setEstadoEdit(data.estado);
         setDescripEdit(data.descripcion);
         setRecomendEdit(data.recomendacion);
 
-        const q = query(
-          collection(db, "finding_history"),
-          where("findingId", "==", id),
-          orderBy("fecha", "desc")
-        );
-        const snapH = await getDocs(q);
-        setHistorial(snapH.docs.map(d => ({ id: d.id, ...d.data() })) as HistorialItem[]);
+        const items = await getHistorialHallazgo(id);
+        setHistorial(items);
       } catch (e) {
         console.error(e);
       } finally {
@@ -127,8 +70,8 @@ export default function DetalleHallazgo() {
     if (!hallazgo || !user) return;
     setGuardando(true);
     try {
-      const cambios: Record<string, any> = { actualizadoEn: serverTimestamp() };
-      const promesas: Promise<any>[]     = [];
+      const cambios: Partial<Hallazgo> = {};
+      const promesas: Promise<void>[]  = [];
 
       if (estadoEdit !== hallazgo.estado) {
         cambios.estado = estadoEdit;
@@ -145,23 +88,17 @@ export default function DetalleHallazgo() {
         promesas.push(registrarHistorial(id, "recomendacion", hallazgo.recomendacion, recomendEdit.trim(), nombre ?? user.uid));
       }
 
-      if (Object.keys(cambios).length > 1) {
-        await updateDoc(doc(db, "findings", id), cambios);
+      if (Object.keys(cambios).length > 0) {
+        await updateHallazgo(id, cambios);
         await Promise.all(promesas);
 
-        if (descripEdit.trim() !== hallazgo.descripcion || recomendEdit.trim() !== hallazgo.recomendacion) {
+        if (cambios.descripcion !== undefined || cambios.recomendacion !== undefined) {
           await registrarAuditoria(nombre ?? user.uid, "EDITAR_HALLAZGO", `Hallazgo editado — ID: ${id}`);
         }
 
-        const q = query(collection(db, "finding_history"), where("findingId", "==", id), orderBy("fecha", "desc"));
-        const snapH = await getDocs(q);
-        setHistorial(snapH.docs.map(d => ({ id: d.id, ...d.data() })) as HistorialItem[]);
-        setHallazgo(prev => prev ? {
-          ...prev,
-          estado:        estadoEdit,
-          descripcion:   descripEdit.trim(),
-          recomendacion: recomendEdit.trim(),
-        } : prev);
+        const items = await getHistorialHallazgo(id);
+        setHistorial(items);
+        setHallazgo(prev => prev ? { ...prev, ...cambios } : prev);
         setMensaje("Cambios guardados correctamente.");
       } else {
         setMensaje("No hay cambios que guardar.");
@@ -173,7 +110,7 @@ export default function DetalleHallazgo() {
       setMensaje(
         msg.includes("index")
           ? "Cambios guardados. Crea el índice en Firebase para ver el historial."
-          : "Error al guardar cambios."
+          : "Error al guardar cambios.",
       );
     } finally {
       setGuardando(false);
@@ -326,14 +263,12 @@ export default function DetalleHallazgo() {
           <div style={{ marginBottom: "1.5rem" }}>
             <p style={labelStyle}>Evidencia</p>
 
-            {/* Texto de evidencia */}
             {hallazgo.evidencia && (
               <p style={{ fontSize: 14, color: "#c0c0d8", lineHeight: 1.7, marginBottom: 12 }}>
                 {hallazgo.evidencia}
               </p>
             )}
 
-            {/* Imágenes de evidencia */}
             {hallazgo.imagenesEvidencia?.length > 0 ? (
               <div>
                 <p style={{ fontSize: 11, color: "#6b6b94", marginBottom: 8 }}>

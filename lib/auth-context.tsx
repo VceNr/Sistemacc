@@ -2,21 +2,21 @@
 
 import { createContext, useContext, useEffect, useState } from "react";
 import { onAuthStateChanged, User } from "firebase/auth";
-import { collection, query, where, getDocs } from "firebase/firestore";
-import { auth, db } from "@/lib/firebase";
+import { auth } from "@/lib/firebase";
+import { getUserByUid } from "@/lib/api";
 
 interface AuthContextType {
-  user: User | null;
+  user:    User | null;
   loading: boolean;
-  rol: "admin" | "analista" | null;
-  nombre: string | null;
+  rol:     "admin" | "analista" | null;
+  nombre:  string | null;
 }
 
 const AuthContext = createContext<AuthContextType>({
-  user: null,
+  user:    null,
   loading: true,
-  rol: null,
-  nombre: null,
+  rol:     null,
+  nombre:  null,
 });
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -28,14 +28,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
-        // Busca por campo uid en vez de por ID del documento
-        const q = query(collection(db, "users"), where("uid", "==", firebaseUser.uid));
-        const snap = await getDocs(q);
-        if (!snap.empty) {
-          const data = snap.docs[0].data();
-          setRol(data.cargo ?? null);
-          setNombre(data.nombre ?? null);
-        }
+        const data = await getUserByUid(firebaseUser.uid);
+        setRol(data?.cargo as "admin" | "analista" ?? null);
+        setNombre(data?.nombre ?? null);
         setUser(firebaseUser);
       } else {
         setUser(null);
