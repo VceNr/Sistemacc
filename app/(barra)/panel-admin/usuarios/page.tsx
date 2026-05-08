@@ -80,31 +80,20 @@ export default function UsuariosPage() {
         position: "sticky", top: 0, zIndex: 50,
       }}>
         <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-          <div style={{
-            width: 32, height: 32, borderRadius: 8,
-            background: "linear-gradient(135deg, #6366f1, #818cf8)",
-            display: "flex", alignItems: "center", justifyContent: "center",
-            fontSize: 14, fontWeight: 700,
-          }}>S</div>
-          <span style={{ fontWeight: 600, fontSize: 15 }}>SistemaCC</span>
-          <span style={{
-            background: rol === "super-admin" ? "rgba(245,158,11,0.15)" : "rgba(99,102,241,0.15)",
-            border: `1px solid ${rol === "super-admin" ? "rgba(245,158,11,0.3)" : "rgba(99,102,241,0.3)"}`,
-            borderRadius: 100, padding: "2px 10px", fontSize: 11,
-            color: rol === "super-admin" ? "#fbbf24" : "#a5b4fc",
-            textTransform: "uppercase",
-          }}>{rol ?? "usuario"}</span>
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
-          <span style={{ fontSize: 13, color: "#64648a" }}>
-            Hola, <strong style={{ color: "#e8e8f0" }}>{nombre}</strong>
-          </span>
           <button onClick={() => router.push("/panel-admin")} style={{
-            background: "rgba(99,102,241,0.1)", border: "1px solid rgba(99,102,241,0.2)",
-            borderRadius: 8, padding: "6px 14px", color: "#a5b4fc",
+            background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)",
+            borderRadius: 8, padding: "6px 14px", color: "#e8e8f0",
             fontSize: 13, cursor: "pointer", fontFamily: "inherit",
           }}>← Volver</button>
+          <span style={{ fontWeight: 600, fontSize: 15 }}>Usuarios</span>
+          <span style={{
+            background: "rgba(99,102,241,0.15)", border: "1px solid rgba(99,102,241,0.3)",
+            borderRadius: 100, padding: "2px 10px", fontSize: 11, color: "#a5b4fc",
+          }}>{usuarios.length} usuarios</span>
         </div>
+        <span style={{ fontSize: 13, color: "#64648a" }}>
+          {nombre} — <span style={{ color: "#a5b4fc" }}>{rol}</span>
+        </span>
       </nav>
 
       <main style={{ padding: "2.5rem 2rem", maxWidth: 1000, margin: "0 auto" }}>

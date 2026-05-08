@@ -50,8 +50,8 @@ export default function Auditoria() {
 
   useEffect(() => {
     if (!authLoading) {
-      if (!user)              router.push("/login");
-      if (rol && rol !== "admin") router.push("/panel-admin");
+      if (!user) router.push("/login");
+      if (rol && rol !== "admin" && rol !== "super-admin") router.push("/panel-admin");
     }
   }, [user, rol, authLoading, router]);
 
@@ -128,7 +128,7 @@ export default function Auditoria() {
           }}>{logsFiltrados.length} eventos</span>
         </div>
         <span style={{ fontSize: 13, color: "#64648a" }}>
-          {nombre} — <span style={{ color: "#a5b4fc" }}>admin</span>
+          {nombre} — <span style={{ color: "#a5b4fc" }}>{rol}</span>
         </span>
       </nav>
 

@@ -14,13 +14,14 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { registerUser } from "@/lib/api"; // Asegúrate de tener esta función en tu API
+import { useAuth } from "@/lib/auth-context";
 
 // ── Schema de validación ──────────────────────────────────────
 const registerSchema = z
   .object({
     name: z.string().min(2, "El nombre debe tener al menos 2 caracteres."),
     email: z.string().email("Ingresa un correo electrónico válido."),
-    cargo: z.literal("analista"),
+    cargo: z.enum(["analista", "admin"]),
     password: z
       .string()
       .min(8, "La contraseña debe tener al menos 8 caracteres."),
@@ -36,17 +37,20 @@ type RegisterSchema = z.infer<typeof registerSchema>;
 // ── Componente ────────────────────────────────────────────────
 export default function RegisterForm() {
   const router = useRouter();
+  const { rol, nombre } = useAuth();
+  const isSuperAdmin = rol === "super-admin";
 
   const form = useForm<RegisterSchema>({
     resolver: zodResolver(registerSchema),
-    defaultValues: { name: "", email: "", cargo: "analista" as const, password: "", confirmPassword: "" },
+    defaultValues: { name: "", email: "", cargo: "analista", password: "", confirmPassword: "" },
   });
 
   const loading = form.formState.isSubmitting;
 
   async function onSubmit(values: RegisterSchema) {
-    // Llamada a la API de registro (ej. Firebase Auth)
-    const result = await registerUser(values.name, values.email, values.password, values.cargo);
+    // Guardia extra: solo el super-admin puede asignar cargo admin
+    const cargo = isSuperAdmin ? values.cargo : "analista";
+    const result = await registerUser(values.name, values.email, values.password, cargo);
 
     if (!result.success) {
       form.setError("root", { message: result.message });
@@ -65,7 +69,7 @@ export default function RegisterForm() {
 
         .register-root {
           font-family: 'DM Sans', sans-serif;
-          min-height: 100vh;
+          min-height: calc(100vh - 60px);
           display: flex;
           align-items: center;
           justify-content: center;
@@ -398,6 +402,25 @@ export default function RegisterForm() {
         }
       `}</style>
 
+      <nav style={{
+        borderBottom: "1px solid rgba(255,255,255,0.07)", padding: "0 2rem",
+        display: "flex", alignItems: "center", justifyContent: "space-between",
+        height: "60px", background: "rgba(15,15,22,0.9)", backdropFilter: "blur(12px)",
+        position: "sticky", top: 0, zIndex: 50, fontFamily: "DM Sans, sans-serif",
+      }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+          <button onClick={() => router.push("/panel-admin")} style={{
+            background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)",
+            borderRadius: 8, padding: "6px 14px", color: "#e8e8f0",
+            fontSize: 13, cursor: "pointer", fontFamily: "inherit",
+          }}>← Volver</button>
+          <span style={{ fontWeight: 600, fontSize: 15, color: "#f0f0f5" }}>Crear Usuario</span>
+        </div>
+        <span style={{ fontSize: 13, color: "#64648a" }}>
+          {nombre} — <span style={{ color: "#a5b4fc" }}>{rol}</span>
+        </span>
+      </nav>
+
       <div className="register-root">
         {/* Orbs */}
         <div className="register-orb register-orb-1" />
@@ -480,8 +503,29 @@ export default function RegisterForm() {
                 />
               </div>
 
-              {/* Cargo fijo — siempre analista, no editable desde UI */}
-              <input type="hidden" {...form.register("cargo")} value="analista" />
+              {/* Cargo — solo super-admin puede asignar cargo admin */}
+              {isSuperAdmin ? (
+                <div className="register-field full-width">
+                  <FormField
+                    control={form.control}
+                    name="cargo"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="register-label">Cargo</FormLabel>
+                        <FormControl>
+                          <select className="register-select" {...field}>
+                            <option value="analista">Analista</option>
+                            <option value="admin">Admin</option>
+                          </select>
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+              ) : (
+                <input type="hidden" {...form.register("cargo")} value="analista" />
+              )}
 
               {/* Contraseñas en Grid (Lado a Lado en Desktop) */}
               <div className="register-grid">
