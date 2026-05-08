@@ -1,10 +1,7 @@
 import { cookies } from "next/headers";
-import { cacheLife } from "next/cache";
 
 export async function getSession() {
-  "use cache";
-  cacheLife("hours"); // expira en horas, también puedes usar "days", "weeks", o un objeto custom
-
+  // Sin caché — la cookie de sesión cambia al hacer login/logout
   const cookieStore = await cookies();
   const token = cookieStore.get("token")?.value;
   return token ?? null;

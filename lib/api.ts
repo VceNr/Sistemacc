@@ -3,7 +3,9 @@ import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   signOut,
+  getAuth,
 } from "firebase/auth";
+import { initializeApp, deleteApp } from "firebase/app";
 import {
   collection, query, where, getDocs, setDoc, doc,
   addDoc, serverTimestamp, getDoc, updateDoc, deleteDoc, orderBy,
@@ -15,17 +17,17 @@ import type {
 
 export type { Severidad, Estado, Hallazgo, HistorialItem, LogAuditoria, CreateHallazgoData };
 
-// ── Helpers de cookie ──────────────────────────────────────────
-function setCookie(name: string, value: string, seconds: number) {
-  const expires = new Date();
-  expires.setSeconds(expires.getSeconds() + seconds);
-  document.cookie = `${name}=${value}; expires=${expires.toUTCString()}; path=/; SameSite=Strict${
-    process.env.NODE_ENV === "production" ? "; Secure" : ""
-  }`;
+// ── Helpers de sesión (HttpOnly via API route) ─────────────────
+async function setSession(uid: string, rol: string) {
+  await fetch("/api/auth/session", {
+    method:  "POST",
+    headers: { "Content-Type": "application/json" },
+    body:    JSON.stringify({ uid, rol }),
+  });
 }
 
-function removeCookie(name: string) {
-  document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;`;
+async function clearSession() {
+  await fetch("/api/auth/session", { method: "DELETE" });
 }
 
 // ── Auditoría ──────────────────────────────────────────────────
@@ -37,7 +39,9 @@ export async function registrarAuditoria(
       usuario, accion, detalle, timestamp: serverTimestamp(),
     });
   } catch (e) {
-    console.error("Error registrando auditoría:", e);
+    // No bloquear la operación principal si falla la auditoría,
+    // pero sí registrar el fallo para monitoreo del servidor
+    console.error("[Auditoría] Error al guardar log:", accion, e);
   }
 }
 
@@ -113,19 +117,71 @@ export async function getHistorialHallazgo(findingId: string): Promise<Historial
 }
 
 // ── Firebase Storage ───────────────────────────────────────────
+const MIME_PERMITIDOS = ["image/jpeg", "image/png", "image/webp", "image/gif"];
+const MAX_SIZE_BYTES  = 5 * 1024 * 1024; // 5 MB
+
+async function validarMime(file: File): Promise<boolean> {
+  // Verificar el tipo MIME declarado
+  if (!MIME_PERMITIDOS.includes(file.type)) return false;
+  // Verificar los magic bytes reales (primeros 4 bytes del binario)
+  const buffer = await file.slice(0, 4).arrayBuffer();
+  const bytes  = new Uint8Array(buffer);
+  const jpeg = bytes[0] === 0xFF && bytes[1] === 0xD8;
+  const png  = bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4E && bytes[3] === 0x47;
+  const gif  = bytes[0] === 0x47 && bytes[1] === 0x49 && bytes[2] === 0x46;
+  const webp = bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46;
+  return jpeg || png || gif || webp;
+}
+
 export async function subirImagenesEvidencia(
   findingId: string, files: File[]
 ): Promise<string[]> {
   if (files.length === 0) return [];
+
+  for (const file of files) {
+    if (file.size > MAX_SIZE_BYTES) {
+      throw new Error(`El archivo "${file.name}" supera el límite de 5 MB.`);
+    }
+    const valido = await validarMime(file);
+    if (!valido) {
+      throw new Error(`El archivo "${file.name}" no es una imagen válida (JPEG, PNG, WebP o GIF).`);
+    }
+  }
+
   return Promise.all(
     files.map(async (file, i) => {
-      const ext        = file.name.split(".").pop();
+      // Usar extensión del MIME real, nunca del nombre del archivo
+      const ext        = file.type.split("/")[1].replace("jpeg", "jpg");
       const path       = `findings/${findingId}/evidencia_${i + 1}_${Date.now()}.${ext}`;
       const storageRef = ref(storage, path);
       await uploadBytes(storageRef, file);
       return getDownloadURL(storageRef);
     }),
   );
+}
+
+// ── Migración one-time: docId aleatorio → UID ─────────────────
+// Requiere reglas de Firestore permisivas temporalmente.
+// Solo llamar una vez; después desplegar las reglas estrictas.
+export async function migrarUsersDocId(): Promise<{ migrados: number; omitidos: number }> {
+  const snap = await getDocs(collection(db, "users"));
+  let migrados = 0;
+  let omitidos = 0;
+
+  for (const d of snap.docs) {
+    const data = d.data();
+    const uid  = data.uid as string | undefined;
+
+    if (!uid || d.id === uid) { omitidos++; continue; }
+
+    // Crear doc con UID como ID
+    await setDoc(doc(db, "users", uid), data);
+    // Eliminar doc con ID aleatorio
+    await deleteDoc(doc(db, "users", d.id));
+    migrados++;
+  }
+
+  return { migrados, omitidos };
 }
 
 // ── Usuarios ───────────────────────────────────────────────────
@@ -137,6 +193,31 @@ export async function getUserByUid(
   if (snap.empty) return null;
   const data = snap.docs[0].data();
   return { cargo: data.cargo ?? null, nombre: data.nombre ?? null };
+}
+
+export interface UserRecord {
+  docId:   string;
+  uid:     string;
+  nombre:  string;
+  correo:  string;
+  cargo:   string;
+  estado:  string;
+}
+
+export async function getAllUsers(): Promise<UserRecord[]> {
+  const snap = await getDocs(collection(db, "users"));
+  return snap.docs.map(d => ({
+    docId:  d.id,
+    uid:    d.data().uid    ?? "",
+    nombre: d.data().nombre ?? "",
+    correo: d.data().correo ?? "",
+    cargo:  d.data().cargo  ?? "",
+    estado: d.data().estado ?? "activo",
+  }));
+}
+
+export async function toggleUserEstado(docId: string, nuevoEstado: "activo" | "inactivo") {
+  await updateDoc(doc(db, "users", docId), { estado: nuevoEstado });
 }
 
 // ── Login ──────────────────────────────────────────────────────
@@ -164,8 +245,7 @@ export async function loginUser(email: string, password: string) {
       return { success: false, message: "Esta cuenta está inactiva." };
     }
 
-    setCookie("token", user.uid,    3600);
-    setCookie("rol",   full.cargo,  3600);
+    await setSession(user.uid, full.cargo);
 
     await registrarAuditoria(
       full.nombre ?? email, "LOGIN", `Inicio de sesión — cargo: ${full.cargo}`
@@ -201,11 +281,30 @@ export async function registerUser(
   password: string,
   cargo:    string = "analista",
 ) {
+  // Usamos una app secundaria para no reemplazar la sesión del admin
+  const secondaryAppName = `register-${Date.now()}`;
+  const firebaseConfig = {
+    apiKey:            process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
+    authDomain:        process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+    projectId:         process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+    storageBucket:     process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+    messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+    appId:             process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
+  };
+
+  const secondaryApp = initializeApp(firebaseConfig, secondaryAppName);
+  const secondaryAuth = getAuth(secondaryApp);
+
   try {
-    const userCredential = await createUserWithEmailAndPassword(auth, correo, password);
+    const userCredential = await createUserWithEmailAndPassword(secondaryAuth, correo, password);
     const user           = userCredential.user;
 
-    const newUserRef = doc(collection(db, "users"));
+    // Cerrar sesión de la app secundaria y eliminarla
+    await signOut(secondaryAuth);
+    await deleteApp(secondaryApp);
+
+    // Usar el UID como ID del documento — requerido por las Firestore Security Rules
+    const newUserRef = doc(db, "users", user.uid);
     await setDoc(newUserRef, {
       uid:       user.uid,
       nombre,
@@ -215,11 +314,10 @@ export async function registerUser(
       createdAt: serverTimestamp(),
     });
 
-    setCookie("token", user.uid, 3600);
-    setCookie("rol",   cargo,    3600);
-
     return { success: true, data: { uid: user.uid, correo, nombre, cargo } };
   } catch (error: any) {
+    await signOut(secondaryAuth).catch(() => {});
+    await deleteApp(secondaryApp).catch(() => {});
     console.error("Error en registro:", error);
     if (error.code === "auth/email-already-in-use") {
       return { success: false, message: "Ya existe una cuenta con ese correo." };
@@ -235,8 +333,7 @@ export async function logoutUser(nombre?: string) {
       await registrarAuditoria(nombre, "LOGOUT", "Cierre de sesión");
     }
     await signOut(auth);
-    removeCookie("token");
-    removeCookie("rol");
+    await clearSession();
     return { success: true };
   } catch (error) {
     console.error("Error al cerrar sesión:", error);

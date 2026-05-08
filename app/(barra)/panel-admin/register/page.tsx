@@ -20,6 +20,7 @@ const registerSchema = z
   .object({
     name: z.string().min(2, "El nombre debe tener al menos 2 caracteres."),
     email: z.string().email("Ingresa un correo electrónico válido."),
+    cargo: z.literal("analista"),
     password: z
       .string()
       .min(8, "La contraseña debe tener al menos 8 caracteres."),
@@ -38,14 +39,14 @@ export default function RegisterForm() {
 
   const form = useForm<RegisterSchema>({
     resolver: zodResolver(registerSchema),
-    defaultValues: { name: "", email: "", password: "", confirmPassword: "" },
+    defaultValues: { name: "", email: "", cargo: "analista" as const, password: "", confirmPassword: "" },
   });
 
   const loading = form.formState.isSubmitting;
 
   async function onSubmit(values: RegisterSchema) {
     // Llamada a la API de registro (ej. Firebase Auth)
-    const result = await registerUser(values.name, values.email, values.password);
+    const result = await registerUser(values.name, values.email, values.password, values.cargo);
 
     if (!result.success) {
       form.setError("root", { message: result.message });
@@ -363,6 +364,31 @@ export default function RegisterForm() {
           margin-top: 5px;
         }
 
+        /* Select de cargo */
+        .register-select {
+          width: 100%;
+          background: rgba(255,255,255,0.035);
+          border: 1px solid rgba(255,255,255,0.08);
+          border-radius: 10px;
+          padding: 11px 14px;
+          font-size: 0.875rem;
+          color: #e8e8f0;
+          font-family: 'DM Sans', sans-serif;
+          transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
+          outline: none;
+          appearance: none;
+          cursor: pointer;
+        }
+        .register-select:focus {
+          border-color: rgba(99,102,241,0.5);
+          background: rgba(99,102,241,0.05);
+          box-shadow: 0 0 0 3px rgba(99,102,241,0.12);
+        }
+        .register-select option {
+          background: #0f0f16;
+          color: #e8e8f0;
+        }
+
         /* Responsive */
         @media (max-width: 480px) {
           .register-grid {
@@ -453,6 +479,9 @@ export default function RegisterForm() {
                   )}
                 />
               </div>
+
+              {/* Cargo fijo — siempre analista, no editable desde UI */}
+              <input type="hidden" {...form.register("cargo")} value="analista" />
 
               {/* Contraseñas en Grid (Lado a Lado en Desktop) */}
               <div className="register-grid">

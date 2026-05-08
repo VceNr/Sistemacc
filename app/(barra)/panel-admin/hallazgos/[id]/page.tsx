@@ -5,8 +5,8 @@ import { useRouter, useParams } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import {
   getHallazgo, updateHallazgo, getHistorialHallazgo,
-  registrarAuditoria, registrarHistorial,
-  type Hallazgo, type HistorialItem, type Estado,
+  registrarAuditoria, registrarHistorial, subirImagenesEvidencia,
+  type Hallazgo, type HistorialItem,
 } from "@/lib/api";
 
 const colorSeveridad: Record<string, string> = {
@@ -34,9 +34,11 @@ export default function DetalleHallazgo() {
   const [mensaje,       setMensaje]       = useState<string | null>(null);
   const [imagenAbierta, setImagenAbierta] = useState<string | null>(null);
 
-  const [estadoEdit,   setEstadoEdit]   = useState<Estado>("Nuevo");
-  const [descripEdit,  setDescripEdit]  = useState("");
-  const [recomendEdit, setRecomendEdit] = useState("");
+  // Solo texto nuevo a AGREGAR — el texto original nunca se toca
+  const [appendDescrip,   setAppendDescrip]   = useState("");
+  const [appendRecomend,  setAppendRecomend]  = useState("");
+  const [appendEvidencia, setAppendEvidencia] = useState("");
+  const [nuevasImagenes,  setNuevasImagenes]  = useState<File[]>([]);
 
   const puedeEditar = rol === "admin" || hallazgo?.nombreCreador === nombre;
 
@@ -51,10 +53,6 @@ export default function DetalleHallazgo() {
         const data = await getHallazgo(id);
         if (!data) { router.push("/panel-admin/hallazgos"); return; }
         setHallazgo(data);
-        setEstadoEdit(data.estado);
-        setDescripEdit(data.descripcion);
-        setRecomendEdit(data.recomendacion);
-
         const items = await getHistorialHallazgo(id);
         setHistorial(items);
       } catch (e) {
@@ -73,37 +71,46 @@ export default function DetalleHallazgo() {
       const cambios: Partial<Hallazgo> = {};
       const promesas: Promise<void>[]  = [];
 
-      if (estadoEdit !== hallazgo.estado) {
-        cambios.estado = estadoEdit;
-        promesas.push(registrarHistorial(id, "estado", hallazgo.estado, estadoEdit, nombre ?? user.uid));
-        promesas.push(registrarAuditoria(nombre ?? user.uid, "CAMBIO_ESTADO",
-          `Hallazgo ${id} — Estado: ${hallazgo.estado} → ${estadoEdit}`));
+      if (appendDescrip.trim()) {
+        const nuevo = hallazgo.descripcion + "\n\n" + appendDescrip.trim();
+        cambios.descripcion = nuevo;
+        promesas.push(registrarHistorial(id, "descripcion", hallazgo.descripcion, nuevo, nombre ?? user.uid));
       }
-      if (descripEdit.trim() !== hallazgo.descripcion) {
-        cambios.descripcion = descripEdit.trim();
-        promesas.push(registrarHistorial(id, "descripcion", hallazgo.descripcion, descripEdit.trim(), nombre ?? user.uid));
+      if (appendRecomend.trim()) {
+        const nuevo = hallazgo.recomendacion + "\n\n" + appendRecomend.trim();
+        cambios.recomendacion = nuevo;
+        promesas.push(registrarHistorial(id, "recomendacion", hallazgo.recomendacion, nuevo, nombre ?? user.uid));
       }
-      if (recomendEdit.trim() !== hallazgo.recomendacion) {
-        cambios.recomendacion = recomendEdit.trim();
-        promesas.push(registrarHistorial(id, "recomendacion", hallazgo.recomendacion, recomendEdit.trim(), nombre ?? user.uid));
+      if (appendEvidencia.trim() || nuevasImagenes.length > 0) {
+        const urlsNuevas = nuevasImagenes.length > 0
+          ? await subirImagenesEvidencia(id, nuevasImagenes)
+          : [];
+        if (appendEvidencia.trim()) {
+          cambios.evidencia = (hallazgo.evidencia ?? "") + (hallazgo.evidencia ? "\n\n" : "") + appendEvidencia.trim();
+        }
+        if (urlsNuevas.length > 0) {
+          cambios.imagenesEvidencia = [...(hallazgo.imagenesEvidencia ?? []), ...urlsNuevas];
+        }
+        promesas.push(registrarHistorial(id, "evidencia", "", "Evidencia actualizada", nombre ?? user.uid));
       }
 
       if (Object.keys(cambios).length > 0) {
         await updateHallazgo(id, cambios);
         await Promise.all(promesas);
-
-        if (cambios.descripcion !== undefined || cambios.recomendacion !== undefined) {
-          await registrarAuditoria(nombre ?? user.uid, "EDITAR_HALLAZGO", `Hallazgo editado — ID: ${id}`);
-        }
+        await registrarAuditoria(nombre ?? user.uid, "EDITAR_HALLAZGO", `Hallazgo editado — ID: ${id}`);
 
         const items = await getHistorialHallazgo(id);
         setHistorial(items);
         setHallazgo(prev => prev ? { ...prev, ...cambios } : prev);
-        setMensaje("Cambios guardados correctamente.");
+        setMensaje("Comentarios agregados correctamente.");
+        setAppendDescrip("");
+        setAppendRecomend("");
+        setAppendEvidencia("");
+        setNuevasImagenes([]);
+        setEditando(false);
       } else {
-        setMensaje("No hay cambios que guardar.");
+        setMensaje("No hay comentarios nuevos que guardar.");
       }
-      setEditando(false);
     } catch (e) {
       console.error(e);
       const msg = (e as any)?.message ?? "";
@@ -128,6 +135,14 @@ export default function DetalleHallazgo() {
     display: "block", fontSize: 11, fontWeight: 500,
     letterSpacing: "0.07em", textTransform: "uppercase",
     color: "#6b6b94", marginBottom: 6,
+  };
+
+  const readonlyBlockStyle: React.CSSProperties = {
+    fontSize: 14, color: "#c0c0d8", lineHeight: 1.7,
+    background: "rgba(255,255,255,0.02)",
+    border: "1px solid rgba(255,255,255,0.06)",
+    borderRadius: 8, padding: "9px 12px",
+    whiteSpace: "pre-wrap",
   };
 
   if (authLoading || loading) return (
@@ -188,7 +203,7 @@ export default function DetalleHallazgo() {
         </span>
       </nav>
 
-      <main style={{ padding: "2rem", maxWidth: 900, margin: "0 auto" }}>
+      <main style={{ padding: "2rem", maxWidth: 1400, margin: "0 auto" }}>
 
         {mensaje && (
           <div style={{
@@ -200,9 +215,11 @@ export default function DetalleHallazgo() {
           }}>{mensaje}</div>
         )}
 
+        <div style={{ display: "grid", gridTemplateColumns: "3fr 2fr", gap: "1.5rem", alignItems: "start" }}>
+
         <div style={{
           background: "rgba(15,15,22,0.85)", border: "1px solid rgba(255,255,255,0.07)",
-          borderRadius: 14, padding: "2rem", marginBottom: "1.5rem",
+          borderRadius: 14, padding: "2rem",
         }}>
 
           {/* Header */}
@@ -227,50 +244,47 @@ export default function DetalleHallazgo() {
             <div><p style={labelStyle}>Creado por</p><p style={{ fontSize: 14 }}>{hallazgo.nombreCreador}</p></div>
           </div>
 
-          {/* Estado */}
+          {/* Estado — solo lectura, nunca editable */}
           <div style={{ marginBottom: "1.5rem" }}>
             <p style={labelStyle}>Estado</p>
-            {editando ? (
-              <select value={estadoEdit} onChange={e => setEstadoEdit(e.target.value as Estado)} style={{ ...inputStyle, width: "auto" }}>
-                <option value="Nuevo">Nuevo</option>
-                <option value="En análisis">En análisis</option>
-                <option value="En remediación">En remediación</option>
-                <option value="Mitigado">Mitigado</option>
-                <option value="Cerrado">Cerrado</option>
-              </select>
-            ) : (
-              <span style={{
-                background: `${colorEstado[hallazgo.estado]}22`,
-                border: `1px solid ${colorEstado[hallazgo.estado]}44`,
-                color: colorEstado[hallazgo.estado],
-                borderRadius: 100, padding: "4px 14px", fontSize: 13,
-              }}>{hallazgo.estado}</span>
-            )}
+            <span style={{
+              background: `${colorEstado[hallazgo.estado]}22`,
+              border: `1px solid ${colorEstado[hallazgo.estado]}44`,
+              color: colorEstado[hallazgo.estado],
+              borderRadius: 100, padding: "4px 14px", fontSize: 13,
+            }}>{hallazgo.estado}</span>
           </div>
 
-          {/* Descripción */}
+          {/* Descripción técnica */}
           <div style={{ marginBottom: "1.5rem" }}>
             <p style={labelStyle}>Descripción técnica</p>
-            {editando ? (
-              <textarea value={descripEdit} onChange={e => setDescripEdit(e.target.value)}
-                rows={4} style={{ ...inputStyle, resize: "vertical" }} />
-            ) : (
-              <p style={{ fontSize: 14, color: "#c0c0d8", lineHeight: 1.7 }}>{hallazgo.descripcion}</p>
+            <div style={readonlyBlockStyle}>{hallazgo.descripcion}</div>
+            {editando && (
+              <div style={{ marginTop: 10 }}>
+                <p style={{ ...labelStyle, color: "#6366f1", marginBottom: 6 }}>Agregar comentario</p>
+                <textarea
+                  value={appendDescrip}
+                  onChange={e => setAppendDescrip(e.target.value)}
+                  placeholder="Escribe aquí para agregar texto adicional..."
+                  rows={3}
+                  style={{ ...inputStyle, resize: "vertical" }}
+                />
+              </div>
             )}
           </div>
 
-          {/* Evidencia — texto + imágenes */}
+          {/* Evidencia */}
           <div style={{ marginBottom: "1.5rem" }}>
             <p style={labelStyle}>Evidencia</p>
 
+            {/* Texto existente — solo lectura */}
             {hallazgo.evidencia && (
-              <p style={{ fontSize: 14, color: "#c0c0d8", lineHeight: 1.7, marginBottom: 12 }}>
-                {hallazgo.evidencia}
-              </p>
+              <div style={{ ...readonlyBlockStyle, marginBottom: 12 }}>{hallazgo.evidencia}</div>
             )}
 
-            {hallazgo.imagenesEvidencia?.length > 0 ? (
-              <div>
+            {/* Imágenes existentes — solo lectura */}
+            {hallazgo.imagenesEvidencia?.length > 0 && (
+              <div style={{ marginBottom: 12 }}>
                 <p style={{ fontSize: 11, color: "#6b6b94", marginBottom: 8 }}>
                   {hallazgo.imagenesEvidencia.length} imagen{hallazgo.imagenesEvidencia.length > 1 ? "es" : ""} adjunta{hallazgo.imagenesEvidencia.length > 1 ? "s" : ""}
                 </p>
@@ -298,21 +312,64 @@ export default function DetalleHallazgo() {
                   ))}
                 </div>
               </div>
-            ) : (
-              !hallazgo.evidencia && (
-                <p style={{ fontSize: 13, color: "#44445e" }}>Sin evidencia registrada.</p>
-              )
+            )}
+
+            {!hallazgo.evidencia && !hallazgo.imagenesEvidencia?.length && (
+              <p style={{ fontSize: 13, color: "#44445e", marginBottom: 12 }}>Sin evidencia registrada.</p>
+            )}
+
+            {/* Inputs para agregar — solo en modo edición */}
+            {editando && (
+              <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 12 }}>
+                <div>
+                  <p style={{ ...labelStyle, color: "#6366f1", marginBottom: 6 }}>Agregar comentario de evidencia</p>
+                  <textarea
+                    value={appendEvidencia}
+                    onChange={e => setAppendEvidencia(e.target.value)}
+                    placeholder="Escribe aquí para agregar texto adicional..."
+                    rows={3}
+                    style={{ ...inputStyle, resize: "vertical" }}
+                  />
+                </div>
+                <div>
+                  <p style={{ ...labelStyle, color: "#6366f1", marginBottom: 6 }}>Agregar imágenes</p>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    onChange={e => setNuevasImagenes(Array.from(e.target.files ?? []))}
+                    style={{ fontSize: 13, color: "#c0c0d8" }}
+                  />
+                  {nuevasImagenes.length > 0 && (
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
+                      {nuevasImagenes.map((f, i) => (
+                        <span key={i} style={{
+                          background: "rgba(99,102,241,0.1)", border: "1px solid rgba(99,102,241,0.2)",
+                          borderRadius: 6, padding: "3px 10px", fontSize: 12, color: "#a5b4fc",
+                        }}>{f.name}</span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
             )}
           </div>
 
           {/* Recomendación */}
           <div style={{ marginBottom: "1.5rem" }}>
             <p style={labelStyle}>Recomendación de remediación</p>
-            {editando ? (
-              <textarea value={recomendEdit} onChange={e => setRecomendEdit(e.target.value)}
-                rows={3} style={{ ...inputStyle, resize: "vertical" }} />
-            ) : (
-              <p style={{ fontSize: 14, color: "#c0c0d8", lineHeight: 1.7 }}>{hallazgo.recomendacion}</p>
+            <div style={readonlyBlockStyle}>{hallazgo.recomendacion}</div>
+            {editando && (
+              <div style={{ marginTop: 10 }}>
+                <p style={{ ...labelStyle, color: "#6366f1", marginBottom: 6 }}>Agregar comentario</p>
+                <textarea
+                  value={appendRecomend}
+                  onChange={e => setAppendRecomend(e.target.value)}
+                  placeholder="Escribe aquí para agregar texto adicional..."
+                  rows={3}
+                  style={{ ...inputStyle, resize: "vertical" }}
+                />
+              </div>
             )}
           </div>
 
@@ -322,9 +379,10 @@ export default function DetalleHallazgo() {
               <>
                 <button onClick={() => {
                   setEditando(false);
-                  setEstadoEdit(hallazgo.estado);
-                  setDescripEdit(hallazgo.descripcion);
-                  setRecomendEdit(hallazgo.recomendacion);
+                  setAppendDescrip("");
+                  setAppendRecomend("");
+                  setAppendEvidencia("");
+                  setNuevasImagenes([]);
                 }} style={{
                   background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)",
                   borderRadius: 10, padding: "9px 20px", color: "#e8e8f0",
@@ -335,7 +393,7 @@ export default function DetalleHallazgo() {
                   borderRadius: 10, padding: "9px 24px", color: "#fff",
                   fontSize: 14, fontWeight: 500, cursor: "pointer", fontFamily: "inherit",
                   opacity: guardando ? 0.6 : 1,
-                }}>{guardando ? "Guardando..." : "Guardar cambios"}</button>
+                }}>{guardando ? "Guardando..." : "Guardar comentarios"}</button>
               </>
             ) : (
               puedeEditar && (
@@ -343,7 +401,7 @@ export default function DetalleHallazgo() {
                   background: "rgba(99,102,241,0.1)", border: "1px solid rgba(99,102,241,0.2)",
                   borderRadius: 10, padding: "9px 20px", color: "#a5b4fc",
                   fontSize: 14, cursor: "pointer", fontFamily: "inherit",
-                }}>✏️ Editar</button>
+                }}>+ Agregar comentarios</button>
               )
             )}
           </div>
@@ -362,33 +420,31 @@ export default function DetalleHallazgo() {
               Sin cambios registrados aún.
             </div>
           ) : (
-            <table style={{ width: "100%", borderCollapse: "collapse" }}>
-              <thead>
-                <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.07)" }}>
-                  {["Campo", "Valor anterior", "Valor nuevo", "Modificado por"].map(h => (
-                    <th key={h} style={{
-                      padding: "10px 16px", textAlign: "left", fontSize: 11,
-                      color: "#6b6b94", textTransform: "uppercase", letterSpacing: "0.07em", fontWeight: 500,
-                    }}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {historial.map((item, i) => (
-                  <tr key={item.id} style={{
-                    borderBottom: "1px solid rgba(255,255,255,0.04)",
-                    background: i % 2 === 0 ? "transparent" : "rgba(255,255,255,0.01)",
-                  }}>
-                    <td style={{ padding: "10px 16px", fontSize: 13, color: "#a5b4fc" }}>{item.campo}</td>
-                    <td style={{ padding: "10px 16px", fontSize: 13, color: "#f87171" }}>{item.valorAnterior}</td>
-                    <td style={{ padding: "10px 16px", fontSize: 13, color: "#34d399" }}>{item.valorNuevo}</td>
-                    <td style={{ padding: "10px 16px", fontSize: 13, color: "#9999bb" }}>{item.modificadoPor}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <div style={{ display: "flex", flexDirection: "column" }}>
+              {historial.map((item, i) => (
+                <div key={item.id} style={{
+                  padding: "12px 16px",
+                  borderBottom: i < historial.length - 1 ? "1px solid rgba(255,255,255,0.04)" : "none",
+                  background: i % 2 === 0 ? "transparent" : "rgba(255,255,255,0.01)",
+                }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+                    <span style={{ fontSize: 11, fontWeight: 600, color: "#a5b4fc", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                      {item.campo}
+                    </span>
+                    <span style={{ fontSize: 11, color: "#44445e" }}>{item.modificadoPor}</span>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
+                    <span style={{ fontSize: 12, color: "#f87171", flex: 1, wordBreak: "break-word" }}>{item.valorAnterior}</span>
+                    <span style={{ color: "#44445e", fontSize: 12, flexShrink: 0 }}>→</span>
+                    <span style={{ fontSize: 12, color: "#34d399", flex: 1, wordBreak: "break-word" }}>{item.valorNuevo}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
           )}
         </div>
+
+        </div>{/* fin grid */}
       </main>
     </div>
   );

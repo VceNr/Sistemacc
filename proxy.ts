@@ -7,7 +7,10 @@ export function proxy(request: NextRequest) {
   const rol   = request.cookies.get("rol")?.value;
 
   const isAuthPage  = pathname === "/login" || pathname === "/";
-  const isAdminOnly = pathname.startsWith("/panel-admin/auditoria");
+  const isAdminOnly =
+    pathname.startsWith("/panel-admin/auditoria") ||
+    pathname.startsWith("/panel-admin/usuarios") ||
+    pathname.startsWith("/panel-admin/register");
 
   // Sin sesión → login
   if (!token && !isAuthPage) {
@@ -19,8 +22,8 @@ export function proxy(request: NextRequest) {
     return NextResponse.redirect(new URL("/panel-admin", request.url));
   }
 
-  // Auditoría solo para admin
-  if (isAdminOnly && rol !== "admin") {
+  // Rutas admin-only: accesibles para admin y super-admin
+  if (isAdminOnly && rol !== "admin" && rol !== "super-admin") {
     return NextResponse.redirect(new URL("/panel-admin", request.url));
   }
 
