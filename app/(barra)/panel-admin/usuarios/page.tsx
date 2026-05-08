@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth, type Rol } from "@/lib/auth-context";
-import { getAllUsers, toggleUserEstado, migrarUsersDocId, type UserRecord } from "@/lib/api";
+import { getAllUsers, toggleUserEstado, type UserRecord } from "@/lib/api";
 
 const colorCargo: Record<string, string> = {
   "super-admin": "#f59e0b",
@@ -30,8 +30,6 @@ export default function UsuariosPage() {
   const [loading,  setLoading]  = useState(true);
   const [toggling,   setToggling]   = useState<string | null>(null);
   const [error,      setError]      = useState<string | null>(null);
-  const [migrando,   setMigrando]   = useState(false);
-  const [migrResult, setMigrResult] = useState<{ migrados: number; omitidos: number } | null>(null);
 
   useEffect(() => {
     if (authLoading) return;
@@ -46,21 +44,6 @@ export default function UsuariosPage() {
       .catch(console.error)
       .finally(() => setLoading(false));
   }, [user, rol]);
-
-  async function handleMigrar() {
-    setMigrando(true);
-    setMigrResult(null);
-    setError(null);
-    try {
-      const result = await migrarUsersDocId();
-      setMigrResult(result);
-    } catch (e) {
-      console.error(e);
-      setError("Error durante la migración. Asegúrate de tener reglas de Firestore permisivas activas.");
-    } finally {
-      setMigrando(false);
-    }
-  }
 
   async function handleToggle(u: UserRecord) {
     if (!puedeToggle(rol, u.cargo)) return;
@@ -141,52 +124,7 @@ export default function UsuariosPage() {
           }}>{error}</div>
         )}
 
-        {/* Panel de migración — solo super-admin */}
-        {rol === "super-admin" && (
-          <div style={{
-            background: "rgba(245,158,11,0.06)", border: "1px solid rgba(245,158,11,0.2)",
-            borderRadius: 10, padding: "14px 18px", marginBottom: "1.5rem",
-            display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12,
-          }}>
-            <div>
-              <p style={{ fontSize: 13, fontWeight: 600, color: "#fbbf24", marginBottom: 3 }}>
-                Migración de base de datos
-              </p>
-              <p style={{ fontSize: 12, color: "#78716c" }}>
-                Convierte los documentos de usuario con ID aleatorio al UID de Firebase.
-                Ejecutar solo una vez. Requiere reglas permisivas temporales en Firestore.
-              </p>
-              {migrResult && (
-                <p style={{ fontSize: 12, color: "#34d399", marginTop: 6 }}>
-                  ✓ Migración completa — {migrResult.migrados} migrados, {migrResult.omitidos} ya correctos
-                </p>
-              )}
-            </div>
-            <button
-              onClick={handleMigrar}
-              disabled={migrando}
-              style={{
-                background: "rgba(245,158,11,0.15)", border: "1px solid rgba(245,158,11,0.35)",
-                borderRadius: 8, padding: "8px 18px", color: "#fbbf24",
-                fontSize: 13, fontWeight: 500, cursor: migrando ? "not-allowed" : "pointer",
-                fontFamily: "inherit", opacity: migrando ? 0.6 : 1, whiteSpace: "nowrap",
-              }}
-            >
-              {migrando ? "Migrando..." : "Ejecutar migración"}
-            </button>
-          </div>
-        )}
-
         {/* Leyenda de permisos */}
-        <div style={{
-          background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)",
-          borderRadius: 10, padding: "10px 16px", marginBottom: "1.5rem",
-          fontSize: 12, color: "#6b6b94", display: "flex", gap: 20, flexWrap: "wrap",
-        }}>
-          <span>🔒 Toggle bloqueado = sin permiso para cambiar ese rol</span>
-          {rol === "admin"       && <span>Tu rol <strong style={{ color: "#a5b4fc" }}>Admin</strong> solo puede inactivar analistas</span>}
-          {rol === "super-admin" && <span>Tu rol <strong style={{ color: "#fbbf24" }}>Super-Admin</strong> puede inactivar admins y analistas</span>}
-        </div>
 
         <div style={{
           background: "rgba(15,15,22,0.85)", border: "1px solid rgba(255,255,255,0.07)",
