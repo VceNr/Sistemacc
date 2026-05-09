@@ -6,13 +6,16 @@ import { useAuth } from "@/lib/auth-context";
 import {
   getHallazgo, updateHallazgo, getHistorialHallazgo,
   registrarAuditoria, registrarHistorial, subirImagenesEvidencia,
-  type Hallazgo, type HistorialItem,
+  type Hallazgo, type HistorialItem, type Estado,
 } from "@/lib/api";
 
 const colorSeveridad: Record<string, string> = {
   "Crítica": "#ef4444", "Alta": "#f97316",
   "Media":   "#eab308", "Baja": "#22c55e",
 };
+
+// Flujo lineal — solo se puede avanzar, nunca retroceder
+const FLUJO_ESTADOS: Estado[] = ["Nuevo", "En análisis", "En remediación", "Mitigado", "Cerrado"];
 
 const colorEstado: Record<string, string> = {
   "Nuevo":          "#6366f1", "En análisis":    "#3b82f6",
@@ -32,7 +35,10 @@ export default function DetalleHallazgo() {
   const [guardando,     setGuardando]     = useState(false);
   const [editando,      setEditando]      = useState(false);
   const [mensaje,       setMensaje]       = useState<string | null>(null);
-  const [imagenAbierta, setImagenAbierta] = useState<string | null>(null);
+  const [imagenAbierta,     setImagenAbierta]     = useState<string | null>(null);
+  const [cambiandoEstado,   setCambiandoEstado]   = useState(false);
+  const [nuevoEstado,       setNuevoEstado]       = useState<Estado | "">("");
+  const [guardandoEstado,   setGuardandoEstado]   = useState(false);
 
   // Solo texto nuevo a AGREGAR — el texto original nunca se toca
   const [appendDescrip,   setAppendDescrip]   = useState("");
@@ -40,7 +46,43 @@ export default function DetalleHallazgo() {
   const [appendEvidencia, setAppendEvidencia] = useState("");
   const [nuevasImagenes,  setNuevasImagenes]  = useState<File[]>([]);
 
-  const puedeEditar = rol === "admin" || hallazgo?.nombreCreador === nombre;
+  const puedeEditar       = rol === "admin" || rol === "super-admin" || hallazgo?.nombreCreador === nombre;
+  const puedeCambiarEstado = rol === "admin" || rol === "super-admin";
+
+  // Estados disponibles para avanzar (solo hacia adelante, nunca retroceder)
+  const estadosSiguientes: Estado[] = hallazgo
+    ? FLUJO_ESTADOS.slice(FLUJO_ESTADOS.indexOf(hallazgo.estado) + 1)
+    : [];
+
+  async function handleCambiarEstado() {
+    if (!hallazgo || !nuevoEstado || !user) return;
+    // Validación doble: el nuevo estado debe estar más adelante en el flujo
+    const idxActual = FLUJO_ESTADOS.indexOf(hallazgo.estado);
+    const idxNuevo  = FLUJO_ESTADOS.indexOf(nuevoEstado as Estado);
+    if (idxNuevo <= idxActual) return;
+
+    setGuardandoEstado(true);
+    try {
+      await updateHallazgo(id, { estado: nuevoEstado as Estado });
+      await registrarHistorial(id, "estado", hallazgo.estado, nuevoEstado, nombre ?? user.uid);
+      await registrarAuditoria(
+        nombre ?? user.uid,
+        "CAMBIO_ESTADO",
+        `Estado cambiado: ${hallazgo.estado} → ${nuevoEstado} — ID: ${id}`,
+      );
+      setHallazgo(prev => prev ? { ...prev, estado: nuevoEstado as Estado } : prev);
+      const items = await getHistorialHallazgo(id);
+      setHistorial(items);
+      setCambiandoEstado(false);
+      setNuevoEstado("");
+      setMensaje(`Estado actualizado a "${nuevoEstado}".`);
+    } catch (e) {
+      console.error(e);
+      setMensaje("Error al cambiar el estado.");
+    } finally {
+      setGuardandoEstado(false);
+    }
+  }
 
   useEffect(() => {
     if (!authLoading && !user) router.push("/login");
@@ -244,15 +286,100 @@ export default function DetalleHallazgo() {
             <div><p style={labelStyle}>Creado por</p><p style={{ fontSize: 14 }}>{hallazgo.nombreCreador}</p></div>
           </div>
 
-          {/* Estado — solo lectura, nunca editable */}
+          {/* Estado */}
           <div style={{ marginBottom: "1.5rem" }}>
             <p style={labelStyle}>Estado</p>
-            <span style={{
-              background: `${colorEstado[hallazgo.estado]}22`,
-              border: `1px solid ${colorEstado[hallazgo.estado]}44`,
-              color: colorEstado[hallazgo.estado],
-              borderRadius: 100, padding: "4px 14px", fontSize: 13,
-            }}>{hallazgo.estado}</span>
+            <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
+              <span style={{
+                background: `${colorEstado[hallazgo.estado]}22`,
+                border: `1px solid ${colorEstado[hallazgo.estado]}44`,
+                color: colorEstado[hallazgo.estado],
+                borderRadius: 100, padding: "4px 14px", fontSize: 13,
+              }}>{hallazgo.estado}</span>
+
+              {/* Botón modificar — solo si puede cambiar y hay estados siguientes */}
+              {puedeCambiarEstado && hallazgo.estado !== "Cerrado" && !cambiandoEstado && (
+                <button onClick={() => { setCambiandoEstado(true); setNuevoEstado(""); }} style={{
+                  background: "rgba(99,102,241,0.08)", border: "1px solid rgba(99,102,241,0.2)",
+                  borderRadius: 8, padding: "4px 12px", color: "#a5b4fc",
+                  fontSize: 12, cursor: "pointer", fontFamily: "inherit",
+                }}>Modificar estado</button>
+              )}
+
+              {/* Combobox + confirmar */}
+              {cambiandoEstado && (
+                <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+                  <select
+                    value={nuevoEstado}
+                    onChange={e => setNuevoEstado(e.target.value as Estado)}
+                    style={{
+                      background: "rgba(255,255,255,0.05)", border: "1px solid rgba(99,102,241,0.3)",
+                      borderRadius: 8, padding: "5px 10px", color: "#e8e8f0",
+                      fontSize: 13, fontFamily: "inherit", outline: "none", cursor: "pointer",
+                    }}
+                  >
+                    <option value="" disabled>Seleccionar estado...</option>
+                    {estadosSiguientes.map(e => (
+                      <option key={e} value={e}>{e}</option>
+                    ))}
+                  </select>
+                  <button
+                    onClick={handleCambiarEstado}
+                    disabled={!nuevoEstado || guardandoEstado}
+                    style={{
+                      background: "linear-gradient(135deg, #6366f1, #818cf8)", border: "none",
+                      borderRadius: 8, padding: "5px 14px", color: "#fff",
+                      fontSize: 13, fontWeight: 500, cursor: !nuevoEstado || guardandoEstado ? "not-allowed" : "pointer",
+                      fontFamily: "inherit", opacity: !nuevoEstado || guardandoEstado ? 0.5 : 1,
+                    }}
+                  >{guardandoEstado ? "Guardando..." : "Confirmar"}</button>
+                  <button
+                    onClick={() => { setCambiandoEstado(false); setNuevoEstado(""); }}
+                    style={{
+                      background: "none", border: "1px solid rgba(255,255,255,0.1)",
+                      borderRadius: 8, padding: "5px 12px", color: "#6b6b94",
+                      fontSize: 13, cursor: "pointer", fontFamily: "inherit",
+                    }}
+                  >Cancelar</button>
+                </div>
+              )}
+            </div>
+
+            {/* Indicador de progreso lineal */}
+            <div style={{ display: "flex", alignItems: "center", gap: "4px", marginTop: "12px" }}>
+              {FLUJO_ESTADOS.map((e, i) => {
+                const idxActual = FLUJO_ESTADOS.indexOf(hallazgo.estado);
+                const esPasado  = i < idxActual;
+                const esActual  = i === idxActual;
+                const esFuturo  = i > idxActual;
+                return (
+                  <div key={e} style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                    <div style={{
+                      display: "flex", flexDirection: "column", alignItems: "center", gap: "4px",
+                    }}>
+                      <div style={{
+                        width: 10, height: 10, borderRadius: "50%",
+                        background: esActual ? colorEstado[e] : esPasado ? colorEstado[e] : "rgba(255,255,255,0.08)",
+                        border: `2px solid ${esActual ? colorEstado[e] : esPasado ? colorEstado[e] + "88" : "rgba(255,255,255,0.1)"}`,
+                        opacity: esFuturo ? 0.35 : 1,
+                        flexShrink: 0,
+                      }} />
+                      <span style={{
+                        fontSize: 9, color: esActual ? colorEstado[e] : esPasado ? "#6b6b94" : "#3a3a5c",
+                        whiteSpace: "nowrap", fontWeight: esActual ? 700 : 400,
+                      }}>{e}</span>
+                    </div>
+                    {i < FLUJO_ESTADOS.length - 1 && (
+                      <div style={{
+                        width: 20, height: 1, marginBottom: 14,
+                        background: esPasado ? "rgba(255,255,255,0.2)" : "rgba(255,255,255,0.06)",
+                        flexShrink: 0,
+                      }} />
+                    )}
+                  </div>
+                );
+              })}
+            </div>
           </div>
 
           {/* Descripción técnica */}
