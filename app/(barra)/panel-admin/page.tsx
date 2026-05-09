@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { getHallazgos, logoutUser, type Hallazgo } from "@/lib/api";
+import { logger } from "@/lib/logger";
 
 const colorSeveridad: Record<string, string> = {
   "Crítica": "#ef4444", "Alta": "#f97316",
@@ -31,7 +32,7 @@ export default function PanelAdmin() {
     if (!user) return;
     getHallazgos()
       .then(setHallazgos)
-      .catch(console.error)
+      .catch(logger.error)
       .finally(() => setLoading(false));
   }, [user]);
 

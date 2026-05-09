@@ -4,7 +4,8 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getAuth, onAuthStateChanged } from "firebase/auth";
 import { collection, query, where, getDocs } from "firebase/firestore";
-import { db } from "@/lib/firebase"; // Ajusta esta ruta según tu proyecto
+import { db } from "@/lib/firebase";
+import { logger } from "@/lib/logger";
 import { Button } from "@/components/ui/button";
 import { logoutUser } from "@/lib/api";
 
@@ -48,7 +49,7 @@ export default function PanelAdmin() {
         setLoading(false);
 
       } catch (error) {
-        console.error("Error verificando rol:", error);
+        logger.error("Error verificando rol:", error);
         router.push("/");
       }
     });

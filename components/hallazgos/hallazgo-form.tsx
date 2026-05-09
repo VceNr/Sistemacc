@@ -7,6 +7,7 @@ import {
   createHallazgo, updateHallazgo, subirImagenesEvidencia, registrarAuditoria,
   type Severidad, type Estado,
 } from "@/lib/api";
+import { logger } from "@/lib/logger";
 
 interface HallazgoFormProps {
   redirectUrl: string;
@@ -134,7 +135,7 @@ export default function HallazgoForm({ redirectUrl }: HallazgoFormProps) {
 
       router.push(redirectUrl);
     } catch (err) {
-      console.error(err);
+      logger.error(err);
       setError("Error al guardar el hallazgo. Intenta de nuevo.");
       setUploading(false);
     } finally {

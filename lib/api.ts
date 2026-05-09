@@ -1,4 +1,5 @@
 import { auth, db, storage } from "@/lib/firebase";
+import { logger } from "@/lib/logger";
 import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
@@ -41,7 +42,7 @@ export async function registrarAuditoria(
   } catch (e) {
     // No bloquear la operación principal si falla la auditoría,
     // pero sí registrar el fallo para monitoreo del servidor
-    console.error("[Auditoría] Error al guardar log:", accion, e);
+    logger.error("[Auditoría] Error al guardar log:", accion, e);
   }
 }
 
@@ -102,7 +103,7 @@ export async function registrarHistorial(
       modificadoPor, fecha: serverTimestamp(),
     });
   } catch (e) {
-    console.error("Error registrando historial:", e);
+    logger.error("Error registrando historial:", e);
   }
 }
 
@@ -263,7 +264,7 @@ export async function loginUser(email: string, password: string) {
       },
     };
   } catch (error: any) {
-    console.error("Error en login:", error);
+    logger.error("Error en login:", error);
     if (
       error.code === "auth/invalid-credential" ||
       error.code === "auth/wrong-password"
@@ -318,7 +319,7 @@ export async function registerUser(
   } catch (error: any) {
     await signOut(secondaryAuth).catch(() => {});
     await deleteApp(secondaryApp).catch(() => {});
-    console.error("Error en registro:", error);
+    logger.error("Error en registro:", error);
     if (error.code === "auth/email-already-in-use") {
       return { success: false, message: "Ya existe una cuenta con ese correo." };
     }
@@ -336,7 +337,7 @@ export async function logoutUser(nombre?: string) {
     await clearSession();
     return { success: true };
   } catch (error) {
-    console.error("Error al cerrar sesión:", error);
+    logger.error("Error al cerrar sesión:", error);
     return { success: false, message: "Error al cerrar sesión." };
   }
 }

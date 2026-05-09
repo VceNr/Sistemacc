@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth, type Rol } from "@/lib/auth-context";
 import { getAllUsers, toggleUserEstado, type UserRecord } from "@/lib/api";
+import { logger } from "@/lib/logger";
 
 const colorCargo: Record<string, string> = {
   "super-admin": "#f59e0b",
@@ -41,7 +42,7 @@ export default function UsuariosPage() {
     if (!user || !ROLES_CON_ACCESO.includes(rol as Rol)) return;
     getAllUsers()
       .then(all => setUsuarios(all.filter(u => u.cargo !== "super-admin")))
-      .catch(console.error)
+      .catch(logger.error)
       .finally(() => setLoading(false));
   }, [user, rol]);
 
@@ -56,7 +57,7 @@ export default function UsuariosPage() {
         prev.map(x => x.docId === u.docId ? { ...x, estado: nuevo } : x)
       );
     } catch (e) {
-      console.error(e);
+      logger.error(e);
       setError("Error al cambiar el estado del usuario.");
     } finally {
       setToggling(null);

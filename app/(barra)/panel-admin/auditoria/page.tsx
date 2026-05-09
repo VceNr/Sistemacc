@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { getAuditLogs, type LogAuditoria } from "@/lib/api";
+import { logger } from "@/lib/logger";
 
 type Accion = "CREAR_HALLAZGO" | "EDITAR_HALLAZGO" | "ELIMINAR_HALLAZGO" | "CAMBIO_ESTADO" | "LOGIN" | "LOGOUT";
 
@@ -59,7 +60,7 @@ export default function Auditoria() {
     if (!user) return;
     getAuditLogs()
       .then(setLogs)
-      .catch(console.error)
+      .catch(logger.error)
       .finally(() => setLoading(false));
   }, [user]);
 

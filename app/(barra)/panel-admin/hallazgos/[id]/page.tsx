@@ -8,6 +8,7 @@ import {
   registrarAuditoria, registrarHistorial, subirImagenesEvidencia,
   type Hallazgo, type HistorialItem, type Estado,
 } from "@/lib/api";
+import { logger } from "@/lib/logger";
 
 const colorSeveridad: Record<string, string> = {
   "Crítica": "#ef4444", "Alta": "#f97316",
@@ -77,7 +78,7 @@ export default function DetalleHallazgo() {
       setNuevoEstado("");
       setMensaje(`Estado actualizado a "${nuevoEstado}".`);
     } catch (e) {
-      console.error(e);
+      logger.error(e);
       setMensaje("Error al cambiar el estado.");
     } finally {
       setGuardandoEstado(false);
@@ -98,7 +99,7 @@ export default function DetalleHallazgo() {
         const items = await getHistorialHallazgo(id);
         setHistorial(items);
       } catch (e) {
-        console.error(e);
+        logger.error(e);
       } finally {
         setLoading(false);
       }
@@ -154,7 +155,7 @@ export default function DetalleHallazgo() {
         setMensaje("No hay comentarios nuevos que guardar.");
       }
     } catch (e) {
-      console.error(e);
+      logger.error(e);
       const msg = (e as any)?.message ?? "";
       setMensaje(
         msg.includes("index")

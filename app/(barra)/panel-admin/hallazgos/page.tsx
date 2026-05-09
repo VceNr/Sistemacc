@@ -7,6 +7,7 @@ import {
   getHallazgos, deleteHallazgo, registrarAuditoria,
   type Hallazgo, type Severidad, type Estado,
 } from "@/lib/api";
+import { logger } from "@/lib/logger";
 
 const SEVERIDADES: Severidad[] = ["Crítica", "Alta", "Media", "Baja"];
 const ESTADOS:     Estado[]    = ["Nuevo", "En análisis", "En remediación", "Mitigado", "Cerrado"];
@@ -240,7 +241,7 @@ export default function HallazgosAdmin() {
     if (!user) return;
     getHallazgos()
       .then(setHallazgos)
-      .catch(e => console.error("Error cargando hallazgos:", e))
+      .catch(e => logger.error("Error cargando hallazgos:", e))
       .finally(() => setLoading(false));
   }, [user]);
 
@@ -299,7 +300,7 @@ export default function HallazgosAdmin() {
         `Hallazgo eliminado — ID: ${id} — Activo: ${activo}`);
       setHallazgos(prev => prev.filter(h => h.id !== id));
     } catch (e) {
-      console.error("Error eliminando:", e);
+      logger.error("Error eliminando:", e);
     } finally {
       setEliminando(null);
     }
@@ -424,7 +425,7 @@ export default function HallazgosAdmin() {
 
       doc.save(`reporte-hallazgos-${new Date().toISOString().split("T")[0]}.pdf`);
     } catch (err) {
-      console.error("Error generando PDF:", err);
+      logger.error("Error generando PDF:", err);
     } finally {
       setExportando(false);
     }
