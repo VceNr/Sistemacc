@@ -24,7 +24,10 @@ const registerSchema = z
     cargo: z.enum(["analista", "admin"]),
     password: z
       .string()
-      .min(8, "La contraseña debe tener al menos 8 caracteres."),
+      .min(9, "La contraseña debe tener más de 8 caracteres.")
+      .regex(/[A-Z]/, "La contraseña debe tener al menos una mayúscula.")
+      .regex(/[0-9]/, "La contraseña debe tener al menos un número.")
+      .regex(/[^A-Za-z0-9]/, "La contraseña debe tener al menos un carácter especial."),
     confirmPassword: z.string(),
   })
   .refine((data) => data.password === data.confirmPassword, {

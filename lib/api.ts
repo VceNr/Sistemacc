@@ -188,12 +188,12 @@ export async function migrarUsersDocId(): Promise<{ migrados: number; omitidos: 
 // ── Usuarios ───────────────────────────────────────────────────
 export async function getUserByUid(
   uid: string
-): Promise<{ cargo: string; nombre: string } | null> {
+): Promise<{ cargo: string; nombre: string; estado: string } | null> {
   const q    = query(collection(db, "users"), where("uid", "==", uid));
   const snap = await getDocs(q);
   if (snap.empty) return null;
   const data = snap.docs[0].data();
-  return { cargo: data.cargo ?? null, nombre: data.nombre ?? null };
+  return { cargo: data.cargo ?? null, nombre: data.nombre ?? null, estado: data.estado ?? "activo" };
 }
 
 export interface UserRecord {
@@ -233,34 +233,25 @@ export async function loginUser(email: string, password: string) {
       return { success: false, message: "Usuario no encontrado en la base de datos." };
     }
 
-    if ((userData as any).estado !== undefined && (userData as any).estado !== "activo") {
+    if (userData.estado !== "activo") {
       return { success: false, message: "Esta cuenta está inactiva." };
     }
 
-    // Necesitamos el estado completo — re-query para obtenerlo
-    const q    = query(collection(db, "users"), where("uid", "==", user.uid));
-    const snap = await getDocs(q);
-    const full = snap.docs[0].data();
-
-    if (full.estado !== "activo") {
-      return { success: false, message: "Esta cuenta está inactiva." };
-    }
-
-    await setSession(user.uid, full.cargo);
+    await setSession(user.uid, userData.cargo);
 
     await registrarAuditoria(
-      full.nombre ?? email, "LOGIN", `Inicio de sesión — cargo: ${full.cargo}`
+      userData.nombre ?? email, "LOGIN", `Inicio de sesión — cargo: ${userData.cargo}`
     );
 
     return {
       success:     true,
       redirectUrl: "/panel-admin",
       data: {
-        uid:    full.uid,
-        correo: full.correo,
-        nombre: full.nombre,
-        cargo:  full.cargo,
-        estado: full.estado,
+        uid:    user.uid,
+        correo: user.email ?? email,
+        nombre: userData.nombre,
+        cargo:  userData.cargo,
+        estado: userData.estado,
       },
     };
   } catch (error: any) {
