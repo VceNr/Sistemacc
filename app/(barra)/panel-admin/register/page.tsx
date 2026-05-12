@@ -49,6 +49,14 @@ export default function RegisterForm() {
   });
 
   const loading = form.formState.isSubmitting;
+  const passwordValue = form.watch("password");
+
+  const passwordRules = [
+    { label: "Más de 8 caracteres", ok: passwordValue.length > 8 },
+    { label: "Una letra mayúscula", ok: /[A-Z]/.test(passwordValue) },
+    { label: "Un número",           ok: /[0-9]/.test(passwordValue) },
+    { label: "Un carácter especial", ok: /[^A-Za-z0-9]/.test(passwordValue) },
+  ];
 
   async function onSubmit(values: RegisterSchema) {
     // Guardia extra: solo el super-admin puede asignar cargo admin
@@ -396,6 +404,40 @@ export default function RegisterForm() {
           color: #e8e8f0;
         }
 
+        /* Checklist de contraseña */
+        .pwd-rules {
+          margin-top: 8px;
+          background: rgba(10,10,20,0.75);
+          border: 1px solid rgba(255,255,255,0.08);
+          border-radius: 10px;
+          padding: 10px 14px;
+          display: flex;
+          flex-direction: column;
+          gap: 5px;
+        }
+        .pwd-rules-title {
+          font-size: 0.68rem;
+          font-weight: 600;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+          color: #6b6b94;
+          margin-bottom: 4px;
+        }
+        .pwd-rule {
+          display: flex;
+          align-items: center;
+          gap: 7px;
+          font-size: 0.78rem;
+          transition: color 0.2s;
+        }
+        .pwd-rule.ok  { color: #4ade80; }
+        .pwd-rule.nok { color: #64648a; }
+        .pwd-rule-icon {
+          width: 14px; height: 14px;
+          flex-shrink: 0;
+          display: flex; align-items: center; justify-content: center;
+        }
+
         /* Responsive */
         @media (max-width: 480px) {
           .register-grid {
@@ -438,10 +480,8 @@ export default function RegisterForm() {
 
           {/* Header */}
           <h1 className="register-title">
-            Únete a<br />la <span>plataforma.</span>
+            Crear Usuario<br />
           </h1>
-          <p className="register-subtitle">Completa tus datos para comenzar</p>
-
           <div className="register-divider" />
 
           <Form {...form}>
@@ -550,7 +590,29 @@ export default function RegisterForm() {
                             />
                           </div>
                         </FormControl>
-                        <FormMessage />
+                        {passwordValue.length > 0 && (
+                          <div className="pwd-rules">
+                            <p className="pwd-rules-title">Requisitos</p>
+                            {passwordRules.map((rule) => (
+                              <span key={rule.label} className={`pwd-rule ${rule.ok ? "ok" : "nok"}`}>
+                                <span className="pwd-rule-icon">
+                                  {rule.ok ? (
+                                    <svg viewBox="0 0 14 14" fill="none" width="14" height="14">
+                                      <circle cx="7" cy="7" r="6.5" fill="rgba(74,222,128,0.15)" stroke="#4ade80" strokeWidth="1"/>
+                                      <path d="M4 7l2 2 4-4" stroke="#4ade80" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
+                                    </svg>
+                                  ) : (
+                                    <svg viewBox="0 0 14 14" fill="none" width="14" height="14">
+                                      <circle cx="7" cy="7" r="6.5" stroke="#44445e" strokeWidth="1"/>
+                                      <circle cx="7" cy="7" r="1.5" fill="#44445e"/>
+                                    </svg>
+                                  )}
+                                </span>
+                                {rule.label}
+                              </span>
+                            ))}
+                          </div>
+                        )}
                       </FormItem>
                     )}
                   />
