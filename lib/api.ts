@@ -15,21 +15,9 @@ import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import type {
   Severidad, Estado, Hallazgo, HistorialItem, LogAuditoria, CreateHallazgoData,
 } from "@/lib/types";
+import { setSession, clearSession } from "@/lib/sesion";
 
 export type { Severidad, Estado, Hallazgo, HistorialItem, LogAuditoria, CreateHallazgoData };
-
-// ── Helpers de sesión (HttpOnly via API route) ─────────────────
-async function setSession(uid: string, rol: string) {
-  await fetch("/api/auth/session", {
-    method:  "POST",
-    headers: { "Content-Type": "application/json" },
-    body:    JSON.stringify({ uid, rol }),
-  });
-}
-
-async function clearSession() {
-  await fetch("/api/auth/session", { method: "DELETE" });
-}
 
 // ── Auditoría ──────────────────────────────────────────────────
 export async function registrarAuditoria(
@@ -150,10 +138,10 @@ export async function subirImagenesEvidencia(
   }
 
   return Promise.all(
-    files.map(async (file, i) => {
+    files.map(async (file) => {
       // Usar extensión del MIME real, nunca del nombre del archivo
       const ext        = file.type.split("/")[1].replace("jpeg", "jpg");
-      const path       = `findings/${findingId}/evidencia_${i + 1}_${Date.now()}.${ext}`;
+      const path       = `findings/${findingId}/${crypto.randomUUID()}.${ext}`;
       const storageRef = ref(storage, path);
       await uploadBytes(storageRef, file);
       return getDownloadURL(storageRef);

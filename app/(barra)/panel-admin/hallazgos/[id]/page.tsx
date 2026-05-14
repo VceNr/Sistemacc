@@ -8,21 +8,11 @@ import {
   registrarAuditoria, registrarHistorial, subirImagenesEvidencia,
   type Hallazgo, type HistorialItem, type Estado,
 } from "@/lib/api";
+import { colorSeveridad, colorEstado } from "@/lib/types";
 import { logger } from "@/lib/logger";
-
-const colorSeveridad: Record<string, string> = {
-  "Crítica": "#ef4444", "Alta": "#f97316",
-  "Media":   "#eab308", "Baja": "#22c55e",
-};
 
 // Flujo lineal — solo se puede avanzar, nunca retroceder
 const FLUJO_ESTADOS: Estado[] = ["Nuevo", "En análisis", "En remediación", "Mitigado", "Cerrado"];
-
-const colorEstado: Record<string, string> = {
-  "Nuevo":          "#6366f1", "En análisis":    "#3b82f6",
-  "En remediación": "#f59e0b", "Mitigado":       "#10b981",
-  "Cerrado":        "#6b7280",
-};
 
 export default function DetalleHallazgo() {
   const { user, nombre, rol, loading: authLoading } = useAuth();

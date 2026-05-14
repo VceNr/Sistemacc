@@ -7,6 +7,8 @@ import { getUserByUid } from "@/lib/api";
 
 export type Rol = "super-admin" | "admin" | "analista";
 
+const VALID_ROLES: Rol[] = ["super-admin", "admin", "analista"];
+
 interface AuthContextType {
   user:    User | null;
   loading: boolean;
@@ -31,7 +33,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
         const data = await getUserByUid(firebaseUser.uid);
-        setRol((data?.cargo as Rol) ?? null);
+        const cargo = data?.cargo;
+        setRol(cargo && VALID_ROLES.includes(cargo as Rol) ? (cargo as Rol) : null);
         setNombre(data?.nombre ?? null);
         setUser(firebaseUser);
       } else {

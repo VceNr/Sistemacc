@@ -7,20 +7,11 @@ import {
   getHallazgos, deleteHallazgo, registrarAuditoria,
   type Hallazgo, type Severidad, type Estado,
 } from "@/lib/api";
+import { colorSeveridad, colorEstado } from "@/lib/types";
 import { logger } from "@/lib/logger";
 
 const SEVERIDADES: Severidad[] = ["Crítica", "Alta", "Media", "Baja"];
 const ESTADOS:     Estado[]    = ["Nuevo", "En análisis", "En remediación", "Mitigado", "Cerrado"];
-
-const colorSeveridad: Record<string, string> = {
-  "Crítica": "#ef4444", "Alta": "#f97316",
-  "Media":   "#eab308", "Baja": "#22c55e",
-};
-const colorEstado: Record<string, string> = {
-  "Nuevo":          "#6366f1", "En análisis":    "#3b82f6",
-  "En remediación": "#f59e0b", "Mitigado":       "#10b981",
-  "Cerrado":        "#6b7280",
-};
 const emojiSeveridad: Record<string, string> = {
   "Crítica": "🔴", "Alta": "🟠", "Media": "🟡", "Baja": "🟢",
 };

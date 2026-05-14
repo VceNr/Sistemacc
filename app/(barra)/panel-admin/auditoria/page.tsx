@@ -154,7 +154,7 @@ export default function Auditoria() {
               <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
                 <path d="M1 3h12M3 7h8M5 11h4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
               </svg>
-              Filtross
+              Filtros
               {chipsActivos > 0 && (
                 <span style={{
                   background: "#6366f1", borderRadius: 100,

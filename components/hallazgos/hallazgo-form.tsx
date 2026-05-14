@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import {
   createHallazgo, updateHallazgo, subirImagenesEvidencia, registrarAuditoria,
-  type Severidad, type Estado,
+  type Severidad,
 } from "@/lib/api";
 import { logger } from "@/lib/logger";
 
@@ -89,7 +89,7 @@ export default function HallazgoForm({ redirectUrl }: HallazgoFormProps) {
   }
 
   // ── Submit ─────────────────────────────────────────────────
-  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+  async function handleSubmit(e: React.SyntheticEvent<HTMLFormElement>) {
     e.preventDefault();
     setError(null);
     if (!validar()) return;
@@ -97,8 +97,13 @@ export default function HallazgoForm({ redirectUrl }: HallazgoFormProps) {
 
     setLoading(true);
     try {
+      // Elimina etiquetas HTML completas y atributos de evento (on*=...)
       const sanitize = (str: string) =>
-        str.replace(/</g, "&lt;").replace(/>/g, "&gt;").trim();
+        str
+          .replace(/<[^>]*>/g, "")
+          .replace(/\bon\w+\s*=\s*["']?[^"'>]*/gi, "")
+          .replace(/javascript\s*:/gi, "")
+          .trim();
 
       // 1. Crear el documento y obtener su ID
       const findingId = await createHallazgo({

@@ -1,6 +1,21 @@
 export type Severidad = "Crítica" | "Alta" | "Media" | "Baja";
 export type Estado    = "Nuevo" | "En análisis" | "En remediación" | "Mitigado" | "Cerrado";
 
+export const colorSeveridad: Record<Severidad, string> = {
+  "Crítica": "#ef4444",
+  "Alta":    "#f97316",
+  "Media":   "#eab308",
+  "Baja":    "#22c55e",
+};
+
+export const colorEstado: Record<Estado, string> = {
+  "Nuevo":          "#6366f1",
+  "En análisis":    "#3b82f6",
+  "En remediación": "#f59e0b",
+  "Mitigado":       "#10b981",
+  "Cerrado":        "#6b7280",
+};
+
 export interface Hallazgo {
   id:                string;
   fecha:             string;

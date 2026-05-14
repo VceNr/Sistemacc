@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth, type Rol } from "@/lib/auth-context";
-import { getAllUsers, toggleUserEstado, type UserRecord } from "@/lib/api";
+import { getAllUsers, toggleUserEstado, registrarAuditoria, type UserRecord } from "@/lib/api";
 import { logger } from "@/lib/logger";
 
 const colorCargo: Record<string, string> = {
@@ -53,6 +53,11 @@ export default function UsuariosPage() {
     setError(null);
     try {
       await toggleUserEstado(u.docId, nuevo);
+      await registrarAuditoria(
+        nombre ?? "desconocido",
+        nuevo === "activo" ? "ACTIVAR_USUARIO" : "DESACTIVAR_USUARIO",
+        `Usuario ${u.nombre} (${u.cargo}) → ${nuevo}`,
+      );
       setUsuarios(prev =>
         prev.map(x => x.docId === u.docId ? { ...x, estado: nuevo } : x)
       );
