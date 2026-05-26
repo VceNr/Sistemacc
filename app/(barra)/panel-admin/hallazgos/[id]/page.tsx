@@ -188,6 +188,16 @@ export default function DetalleHallazgo() {
 
   return (
     <div style={{ minHeight: "100vh", background: "#0a0a0f", color: "#f0f0f5", fontFamily: "DM Sans, sans-serif" }}>
+      <style>{`
+        .det-navbar { padding: 0 2rem; }
+        .det-layout { display: grid; grid-template-columns: 3fr 2fr; gap: 1.5rem; align-items: start; }
+        @media (max-width: 900px) {
+          .det-layout { grid-template-columns: 1fr; }
+        }
+        @media (max-width: 768px) {
+          .det-navbar { padding: 0 1rem; }
+        }
+      `}</style>
 
       {/* Lightbox */}
       {imagenAbierta && (
@@ -218,11 +228,11 @@ export default function DetalleHallazgo() {
 
       {/* Navbar */}
       <nav style={{
-        borderBottom: "1px solid rgba(255,255,255,0.07)", padding: "0 2rem",
+        borderBottom: "1px solid rgba(255,255,255,0.07)",
         display: "flex", alignItems: "center", justifyContent: "space-between",
         height: "60px", background: "rgba(15,15,22,0.9)", backdropFilter: "blur(12px)",
         position: "sticky", top: 0, zIndex: 50,
-      }}>
+      }} className="det-navbar">
         <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
           <button onClick={() => router.back()} style={{
             background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)",
@@ -248,7 +258,7 @@ export default function DetalleHallazgo() {
           }}>{mensaje}</div>
         )}
 
-        <div style={{ display: "grid", gridTemplateColumns: "3fr 2fr", gap: "1.5rem", alignItems: "start" }}>
+        <div className="det-layout">
 
         <div style={{
           background: "rgba(15,15,22,0.85)", border: "1px solid rgba(255,255,255,0.07)",

@@ -109,13 +109,20 @@ export default function Auditoria() {
 
   return (
     <div style={{ minHeight: "100vh", background: "#0a0a0f", color: "#f0f0f5", fontFamily: "DM Sans, sans-serif" }}>
+      <style>{`
+        .aud-navbar { padding: 0 2rem; }
+        .aud-table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+        @media (max-width: 768px) {
+          .aud-navbar { padding: 0 1rem; }
+        }
+      `}</style>
 
       <nav style={{
-        borderBottom: "1px solid rgba(255,255,255,0.07)", padding: "0 2rem",
+        borderBottom: "1px solid rgba(255,255,255,0.07)",
         display: "flex", alignItems: "center", justifyContent: "space-between",
         height: "60px", background: "rgba(15,15,22,0.9)", backdropFilter: "blur(12px)",
         position: "sticky", top: 0, zIndex: 50,
-      }}>
+      }} className="aud-navbar">
         <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
           <button onClick={() => router.push("/panel-admin")} style={{
             background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)",
@@ -176,7 +183,7 @@ export default function Auditoria() {
                 background: "rgba(13,13,20,0.98)", border: "1px solid rgba(255,255,255,0.09)",
                 borderRadius: 12, padding: "1.25rem 1.5rem",
                 boxShadow: "0 16px 48px rgba(0,0,0,0.6)",
-                zIndex: 30, minWidth: 420,
+                zIndex: 30, minWidth: "min(420px, 90vw)",
               }}>
 
                 {/* Cabecera */}
@@ -271,6 +278,7 @@ export default function Auditoria() {
               No hay eventos registrados.
             </div>
           ) : (
+            <div className="aud-table-scroll">
             <table style={{ width: "100%", borderCollapse: "collapse" }}>
               <thead>
                 <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.07)" }}>
@@ -306,6 +314,7 @@ export default function Auditoria() {
                 ))}
               </tbody>
             </table>
+            </div>
           )}
         </div>
       </main>

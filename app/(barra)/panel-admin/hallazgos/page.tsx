@@ -438,15 +438,26 @@ export default function HallazgosAdmin() {
 
   return (
     <div style={{ minHeight: "100vh", background: "#0a0a0f", color: "#f0f0f5", fontFamily: "DM Sans, sans-serif" }}>
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      <style>{`
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .hall-navbar { padding: 0 2rem; }
+        .hall-layout { display: grid; grid-template-columns: 1fr 320px; gap: 1.5rem; align-items: start; }
+        .hall-table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+        @media (max-width: 900px) {
+          .hall-layout { grid-template-columns: 1fr; }
+        }
+        @media (max-width: 768px) {
+          .hall-navbar { padding: 0 1rem; }
+        }
+      `}</style>
 
       {/* Navbar */}
       <nav style={{
-        borderBottom: "1px solid rgba(255,255,255,0.07)", padding: "0 2rem",
+        borderBottom: "1px solid rgba(255,255,255,0.07)",
         display: "flex", alignItems: "center", justifyContent: "space-between",
         height: "60px", background: "rgba(15,15,22,0.9)", backdropFilter: "blur(12px)",
         position: "sticky", top: 0, zIndex: 50,
-      }}>
+      }} className="hall-navbar">
         <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
           <button onClick={() => router.push("/panel-admin")} style={{
             background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)",
@@ -529,7 +540,7 @@ export default function HallazgosAdmin() {
                 position: "absolute", top: "calc(100% + 8px)", left: 0,
                 background: "rgba(13,13,20,0.98)", border: "1px solid rgba(255,255,255,0.09)",
                 borderRadius: 12, padding: "1.25rem 1.5rem",
-                boxShadow: "0 16px 48px rgba(0,0,0,0.6)", zIndex: 30, minWidth: 420,
+                boxShadow: "0 16px 48px rgba(0,0,0,0.6)", zIndex: 30, minWidth: "min(420px, 90vw)",
               }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.1rem" }}>
                   <span style={{ fontSize: 11, color: "#6b6b94", textTransform: "uppercase", letterSpacing: "0.07em" }}>Filtros</span>
@@ -607,7 +618,7 @@ export default function HallazgosAdmin() {
         </div>
 
         {/* Layout: tabla izquierda | gráficos derecha */}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 320px", gap: "1.5rem", alignItems: "start" }}>
+        <div className="hall-layout">
 
           {/* ── Tabla ── */}
           <div style={{
@@ -619,6 +630,7 @@ export default function HallazgosAdmin() {
                 <p style={{ fontSize: 14 }}>No hay hallazgos que coincidan con los filtros.</p>
               </div>
             ) : (
+              <div className="hall-table-scroll">
               <table style={{ width: "100%", borderCollapse: "collapse" }}>
                 <thead>
                   <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.07)" }}>
@@ -678,6 +690,7 @@ export default function HallazgosAdmin() {
                   ))}
                 </tbody>
               </table>
+              </div>
             )}
           </div>
 

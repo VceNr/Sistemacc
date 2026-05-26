@@ -45,14 +45,29 @@ export default function PanelAdmin() {
 
   return (
     <div style={{ minHeight: "100vh", background: "#0a0a0f", color: "#f0f0f5", fontFamily: "DM Sans, sans-serif" }}>
+      <style>{`
+        .pa-navbar { padding: 0 2rem; }
+        .pa-grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 2rem; }
+        .pa-actions { display: flex; gap: 1rem; margin-bottom: 2rem; flex-wrap: wrap; }
+        .pa-table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+        @media (max-width: 900px) {
+          .pa-grid-4 { grid-template-columns: repeat(2, 1fr); }
+        }
+        @media (max-width: 768px) {
+          .pa-navbar { padding: 0 1rem; }
+        }
+        @media (max-width: 480px) {
+          .pa-grid-4 { grid-template-columns: 1fr; }
+        }
+      `}</style>
 
       {/* Navbar */}
       <nav style={{
-        borderBottom: "1px solid rgba(255,255,255,0.07)", padding: "0 2rem",
+        borderBottom: "1px solid rgba(255,255,255,0.07)",
         display: "flex", alignItems: "center", justifyContent: "space-between",
         height: "60px", background: "rgba(15,15,22,0.9)", backdropFilter: "blur(12px)",
         position: "sticky", top: 0, zIndex: 50,
-      }}>
+      }} className="pa-navbar">
         <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
           <div style={{
             width: 32, height: 32, borderRadius: 8,
@@ -87,7 +102,7 @@ export default function PanelAdmin() {
         </div>
 
         {/* Cards */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "1rem", marginBottom: "2rem" }}>
+        <div className="pa-grid-4">
           {[
             { label: "Total hallazgos",  valor: total,         color: "#6366f1" },
             { label: "Críticos",         valor: criticos,      color: "#ef4444" },
@@ -105,7 +120,7 @@ export default function PanelAdmin() {
         </div>
 
         {/* Acciones */}
-        <div style={{ display: "flex", gap: "1rem", marginBottom: "2rem" }}>
+        <div className="pa-actions">
           <button onClick={() => router.push("/panel-admin/hallazgos/nuevo")} style={{
             background: "linear-gradient(135deg, #6366f1, #818cf8)", border: "none",
             borderRadius: 10, padding: "10px 20px", color: "#fff",
@@ -161,6 +176,7 @@ export default function PanelAdmin() {
               <p style={{ fontSize: 14 }}>No hay hallazgos registrados aún.</p>
             </div>
           ) : (
+            <div className="pa-table-scroll">
             <table style={{ width: "100%", borderCollapse: "collapse" }}>
               <thead>
                 <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.07)" }}>
@@ -209,6 +225,7 @@ export default function PanelAdmin() {
                 ))}
               </tbody>
             </table>
+            </div>
           )}
         </div>
       </main>

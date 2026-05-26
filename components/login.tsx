@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -471,7 +470,39 @@ export default function LoginForm() {
           .login-hero { display: none; }
           .login-panel {
             width: 100%;
-            height: 100vh;
+            min-height: 100vh;
+            height: auto;
+            padding: 1.5rem;
+            align-items: center;
+          }
+          .login-card {
+            padding: 2rem 1.75rem 1.75rem;
+          }
+        }
+
+        @media (max-width: 480px) {
+          .login-panel {
+            padding: 1rem;
+          }
+          .login-card {
+            padding: 1.75rem 1.25rem 1.5rem;
+            border-radius: 16px;
+          }
+          .login-title {
+            font-size: 1.75rem;
+          }
+        }
+
+        @media (max-width: 360px) {
+          .login-card {
+            padding: 1.5rem 1rem 1.25rem;
+          }
+          .login-title {
+            font-size: 1.5rem;
+          }
+          .login-btn {
+            padding: 11px;
+            font-size: 0.82rem;
           }
         }
       `}</style>
@@ -668,9 +699,7 @@ export default function LoginForm() {
                       </FormItem>
                     )}
                   />
-                  <div className="login-forgot">
-                    <Link href="/forgot-password">¿Olvidaste tu contraseña?</Link>
-                  </div>
+
                 </div>
 
                 {/* Submit */}
