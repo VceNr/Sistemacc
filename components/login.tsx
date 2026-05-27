@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -24,6 +25,30 @@ const loginSchema = z.object({
 
 type LoginSchema = z.infer<typeof loginSchema>;
 
+// ── Rate limiting (client-side, persiste en localStorage) ─────
+const RL_KEY       = "scc_login_attempts";
+const MAX_ATTEMPTS = 10;
+const LOCKOUT_MS   = 60 * 60 * 1000; // 1 hora
+
+interface RLRecord { count: number; lockedUntil: number | null }
+
+function rlGet(): RLRecord {
+  try {
+    const raw = localStorage.getItem(RL_KEY);
+    if (!raw) return { count: 0, lockedUntil: null };
+    return JSON.parse(raw) as RLRecord;
+  } catch { return { count: 0, lockedUntil: null }; }
+}
+function rlSet(data: RLRecord) { localStorage.setItem(RL_KEY, JSON.stringify(data)); }
+function rlClear()             { localStorage.removeItem(RL_KEY); }
+
+function formatCountdown(ms: number): string {
+  const s   = Math.ceil(ms / 1000);
+  const min = Math.floor(s / 60);
+  const sec = s % 60;
+  return `${min}m ${sec.toString().padStart(2, "0")}s`;
+}
+
 // ── Componente ────────────────────────────────────────────────
 export default function LoginForm() {
   const router = useRouter();
@@ -35,13 +60,62 @@ export default function LoginForm() {
 
   const loading = form.formState.isSubmitting;
 
+  const [lockRemaining, setLockRemaining] = useState<number>(0);
+  const [attemptCount,  setAttemptCount]  = useState<number>(0);
+
+  // Countdown tick — sincroniza estado con localStorage cada segundo
+  useEffect(() => {
+    const sync = () => {
+      const rec       = rlGet();
+      const remaining = rec.lockedUntil ? Math.max(0, rec.lockedUntil - Date.now()) : 0;
+      setAttemptCount(rec.count);
+      setLockRemaining(remaining);
+    };
+    sync();
+    const id = setInterval(sync, 1000);
+    return () => clearInterval(id);
+  }, []);
+
   async function onSubmit(values: LoginSchema) {
+    // Verificar bloqueo activo antes de intentar login
+    const rec = rlGet();
+    const now = Date.now();
+    if (rec.lockedUntil && rec.lockedUntil > now) {
+      form.setError("root", { message: "Acceso bloqueado. Espera a que termine el contador." });
+      return;
+    }
+
     const result = await loginUser(values.email, values.password);
 
     if (!result.success) {
-      form.setError("root", { message: result.message });
+      const newCount = rec.count + 1;
+
+      if (newCount >= MAX_ATTEMPTS) {
+        // Bloqueo de 1 hora
+        const lockedUntil = now + LOCKOUT_MS;
+        rlSet({ count: newCount, lockedUntil });
+        setAttemptCount(newCount);
+        setLockRemaining(LOCKOUT_MS);
+        form.setError("root", {
+          message: "Has alcanzado el límite de intentos. Acceso bloqueado por 1 hora.",
+        });
+      } else {
+        rlSet({ count: newCount, lockedUntil: null });
+        setAttemptCount(newCount);
+        const restantes = MAX_ATTEMPTS - newCount;
+        // Advertencia a partir del intento 5
+        const aviso = newCount >= 5
+          ? ` — ${restantes} intento${restantes !== 1 ? "s" : ""} restante${restantes !== 1 ? "s" : ""}`
+          : "";
+        form.setError("root", { message: `${result.message}${aviso}` });
+      }
       return;
     }
+
+    // Login exitoso — limpiar contador
+    rlClear();
+    setAttemptCount(0);
+    setLockRemaining(0);
 
     if (result.redirectUrl) {
       router.push(result.redirectUrl);
@@ -430,6 +504,34 @@ export default function LoginForm() {
         }
         .login-btn:active:not(:disabled) { transform: translateY(0px); }
         .login-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+        .login-btn.locked {
+          background: linear-gradient(135deg, #4b1c1c 0%, #7f1d1d 100%);
+          box-shadow: 0 4px 20px rgba(239,68,68,0.2);
+          font-variant-numeric: tabular-nums;
+        }
+
+        /* Alerta de bloqueo total */
+        .login-lockout {
+          display: flex;
+          align-items: flex-start;
+          gap: 8px;
+          background: rgba(239,68,68,0.10);
+          border: 1px solid rgba(239,68,68,0.30);
+          border-radius: 10px;
+          padding: 12px 14px;
+          font-size: 0.8rem;
+          color: #fca5a5;
+          margin-bottom: 1rem;
+          animation: slideDown 0.3s ease;
+        }
+        .login-lockout-timer {
+          font-size: 1.1rem;
+          font-weight: 600;
+          color: #f87171;
+          font-variant-numeric: tabular-nums;
+          letter-spacing: 0.04em;
+          margin-top: 4px;
+        }
 
         /* Spinner */
         .login-spinner {
@@ -642,8 +744,22 @@ export default function LoginForm() {
             <Form {...form}>
               <form onSubmit={form.handleSubmit(onSubmit)} noValidate>
 
-                {/* Error global */}
-                {form.formState.errors.root && (
+                {/* Banner de bloqueo con cuenta regresiva */}
+                {lockRemaining > 0 && (
+                  <div className="login-lockout">
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style={{ flexShrink: 0, marginTop: 2 }}>
+                      <circle cx="8" cy="8" r="7" stroke="#f87171" strokeWidth="1.3"/>
+                      <path d="M8 4v4.5l3 1.5" stroke="#f87171" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                    <div>
+                      <div>Demasiados intentos fallidos. Acceso bloqueado temporalmente.</div>
+                      <div className="login-lockout-timer">{formatCountdown(lockRemaining)}</div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Error global (solo cuando no hay bloqueo activo) */}
+                {form.formState.errors.root && lockRemaining === 0 && (
                   <div className="login-error">
                     <svg width="15" height="15" viewBox="0 0 15 15" fill="none" style={{ flexShrink: 0, marginTop: 1 }}>
                       <circle cx="7.5" cy="7.5" r="7" stroke="#f87171" strokeWidth="1.2"/>
@@ -705,11 +821,17 @@ export default function LoginForm() {
                 {/* Submit */}
                 <button
                   type="submit"
-                  className="login-btn"
-                  disabled={loading}
+                  className={`login-btn${lockRemaining > 0 ? " locked" : ""}`}
+                  disabled={loading || lockRemaining > 0}
                 >
                   {loading && <span className="login-spinner" />}
-                  {loading ? "Verificando..." : "Iniciar sesión"}
+                  {lockRemaining > 0
+                    ? `Bloqueado — ${formatCountdown(lockRemaining)}`
+                    : loading
+                      ? "Verificando..."
+                      : attemptCount > 0
+                        ? `Iniciar sesión (intento ${attemptCount + 1}/${MAX_ATTEMPTS})`
+                        : "Iniciar sesión"}
                 </button>
 
               </form>

@@ -8,6 +8,7 @@ import {
   type Severidad,
 } from "@/lib/api";
 import { logger } from "@/lib/logger";
+import DOMPurify from "dompurify";
 
 interface HallazgoFormProps {
   redirectUrl: string;
@@ -97,13 +98,9 @@ export default function HallazgoForm({ redirectUrl }: HallazgoFormProps) {
 
     setLoading(true);
     try {
-      // Elimina etiquetas HTML completas y atributos de evento (on*=...)
+      // Elimina TODO el HTML — sin tags permitidos, sin atributos
       const sanitize = (str: string) =>
-        str
-          .replace(/<[^>]*>/g, "")
-          .replace(/\bon\w+\s*=\s*["']?[^"'>]*/gi, "")
-          .replace(/javascript\s*:/gi, "")
-          .trim();
+        DOMPurify.sanitize(str, { ALLOWED_TAGS: [], ALLOWED_ATTR: [] });
 
       // 1. Crear el documento y obtener su ID
       const findingId = await createHallazgo({
