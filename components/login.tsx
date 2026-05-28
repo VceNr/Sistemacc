@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -14,6 +13,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { loginUser } from "@/lib/api";
+import { checkRateLimit, recordFailure, clearRateLimit } from "@/lib/rate-limit";
 
 // ── Schema de validación ──────────────────────────────────────
 const loginSchema = z.object({
@@ -25,22 +25,16 @@ const loginSchema = z.object({
 
 type LoginSchema = z.infer<typeof loginSchema>;
 
-// ── Rate limiting (client-side, persiste en localStorage) ─────
-const RL_KEY       = "scc_login_attempts";
-const MAX_ATTEMPTS = 10;
-const LOCKOUT_MS   = 60 * 60 * 1000; // 1 hora
-
-interface RLRecord { count: number; lockedUntil: number | null }
-
-function rlGet(): RLRecord {
-  try {
-    const raw = localStorage.getItem(RL_KEY);
-    if (!raw) return { count: 0, lockedUntil: null };
-    return JSON.parse(raw) as RLRecord;
-  } catch { return { count: 0, lockedUntil: null }; }
+// Hash SHA-256 del email — lo que llega a las server actions, nunca el email en crudo
+async function hashEmail(email: string): Promise<string> {
+  const buf = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(email.toLowerCase()),
+  );
+  return Array.from(new Uint8Array(buf))
+    .map(b => b.toString(16).padStart(2, "0"))
+    .join("");
 }
-function rlSet(data: RLRecord) { localStorage.setItem(RL_KEY, JSON.stringify(data)); }
-function rlClear()             { localStorage.removeItem(RL_KEY); }
 
 function formatCountdown(ms: number): string {
   const s   = Math.ceil(ms / 1000);
@@ -51,8 +45,6 @@ function formatCountdown(ms: number): string {
 
 // ── Componente ────────────────────────────────────────────────
 export default function LoginForm() {
-  const router = useRouter();
-
   const form = useForm<LoginSchema>({
     resolver: zodResolver(loginSchema),
     defaultValues: { email: "", password: "" },
@@ -61,26 +53,22 @@ export default function LoginForm() {
   const loading = form.formState.isSubmitting;
 
   const [lockRemaining, setLockRemaining] = useState<number>(0);
-  const [attemptCount,  setAttemptCount]  = useState<number>(0);
 
-  // Countdown tick — sincroniza estado con localStorage cada segundo
+  // Countdown tick — decrementa cada segundo mientras haya bloqueo activo
   useEffect(() => {
-    const sync = () => {
-      const rec       = rlGet();
-      const remaining = rec.lockedUntil ? Math.max(0, rec.lockedUntil - Date.now()) : 0;
-      setAttemptCount(rec.count);
-      setLockRemaining(remaining);
-    };
-    sync();
-    const id = setInterval(sync, 1000);
+    const id = setInterval(() => {
+      setLockRemaining(prev => (prev > 0 ? Math.max(0, prev - 1000) : 0));
+    }, 1000);
     return () => clearInterval(id);
   }, []);
 
   async function onSubmit(values: LoginSchema) {
-    // Verificar bloqueo activo antes de intentar login
-    const rec = rlGet();
-    const now = Date.now();
-    if (rec.lockedUntil && rec.lockedUntil > now) {
+    const eh = await hashEmail(values.email);
+
+    // Verificar bloqueo activo en el servidor (por IP + hash de email)
+    const rl = await checkRateLimit(eh);
+    if (rl.blocked && rl.lockedUntil) {
+      setLockRemaining(Math.max(0, rl.lockedUntil - Date.now()));
       form.setError("root", { message: "Acceso bloqueado. Espera a que termine el contador." });
       return;
     }
@@ -88,40 +76,27 @@ export default function LoginForm() {
     const result = await loginUser(values.email, values.password);
 
     if (!result.success) {
-      const newCount = rec.count + 1;
+      const { lockedUntil, attemptsLeft } = await recordFailure(eh);
 
-      if (newCount >= MAX_ATTEMPTS) {
-        // Bloqueo de 1 hora
-        const lockedUntil = now + LOCKOUT_MS;
-        rlSet({ count: newCount, lockedUntil });
-        setAttemptCount(newCount);
-        setLockRemaining(LOCKOUT_MS);
+      if (lockedUntil) {
+        setLockRemaining(Math.max(0, lockedUntil - Date.now()));
         form.setError("root", {
           message: "Has alcanzado el límite de intentos. Acceso bloqueado por 1 hora.",
         });
       } else {
-        rlSet({ count: newCount, lockedUntil: null });
-        setAttemptCount(newCount);
-        const restantes = MAX_ATTEMPTS - newCount;
-        // Advertencia a partir del intento 5
-        const aviso = newCount >= 5
-          ? ` — ${restantes} intento${restantes !== 1 ? "s" : ""} restante${restantes !== 1 ? "s" : ""}`
-          : "";
+        const aviso =
+          attemptsLeft > 0 && attemptsLeft <= 5
+            ? ` — ${attemptsLeft} intento${attemptsLeft !== 1 ? "s" : ""} restante${attemptsLeft !== 1 ? "s" : ""}`
+            : "";
         form.setError("root", { message: `${result.message}${aviso}` });
       }
       return;
     }
 
-    // Login exitoso — limpiar contador
-    rlClear();
-    setAttemptCount(0);
-    setLockRemaining(0);
-
-    if (result.redirectUrl) {
-      router.push(result.redirectUrl);
-    } else {
-      router.push("/");
-    }
+    // Login exitoso — limpiar contador (fire-and-forget para no bloquear el redirect).
+    clearRateLimit(eh).catch(() => {});
+    // Carga completa de página para que el browser procese Set-Cookie antes del render.
+    window.location.assign(result.redirectUrl ?? "/panel-admin");
   }
 
   return (
@@ -829,9 +804,7 @@ export default function LoginForm() {
                     ? `Bloqueado — ${formatCountdown(lockRemaining)}`
                     : loading
                       ? "Verificando..."
-                      : attemptCount > 0
-                        ? `Iniciar sesión (intento ${attemptCount + 1}/${MAX_ATTEMPTS})`
-                        : "Iniciar sesión"}
+                      : "Iniciar sesión"}
                 </button>
 
               </form>

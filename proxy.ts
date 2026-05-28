@@ -1,35 +1,39 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-// ── HMAC helpers (duplicados de lib/sesion.ts — Edge runtime no puede importar "use server") ──
+// ── AES-GCM helpers (duplicados de lib/sesion.ts — Edge runtime no puede importar "use server") ──
 const SECRET = process.env.SESSION_SECRET ?? "";
 
-function b64urlToUint8(b64: string): Uint8Array<ArrayBuffer> {
-  const padded = b64.replace(/-/g, "+").replace(/_/g, "/")
+function b64urlToUint8(b64: string): Uint8Array {
+  const padded = b64
+    .replace(/-/g, "+")
+    .replace(/_/g, "/")
     .padEnd(b64.length + (4 - (b64.length % 4)) % 4, "=");
-  const str   = atob(padded);
-  const buf   = new ArrayBuffer(str.length);
-  const bytes = new Uint8Array(buf);
-  for (let i = 0; i < str.length; i++) bytes[i] = str.charCodeAt(i);
-  return bytes;
+  const str = atob(padded);
+  const buf = new Uint8Array(str.length);
+  for (let i = 0; i < str.length; i++) buf[i] = str.charCodeAt(i);
+  return buf;
 }
 
-// Verifica la firma HMAC-SHA256 y devuelve el valor limpio, o null si inválido/tamperado
-async function verifyAndExtract(signed: string): Promise<string | null> {
+async function getKey(): Promise<CryptoKey> {
+  const raw = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(SECRET || "fallback-insecure-key-do-not-use"),
+  );
+  return crypto.subtle.importKey("raw", raw, { name: "AES-GCM" }, false, ["decrypt"]);
+}
+
+// Descifra un blob AES-GCM (formato: base64url(IV || ciphertext+tag))
+// Devuelve el texto en claro, o null si el blob es inválido o fue manipulado
+async function decryptValue(encrypted: string): Promise<string | null> {
   try {
-    const i = signed.lastIndexOf(".");
-    if (i === -1) return null;
-    const value    = signed.slice(0, i);
-    const sigBytes = b64urlToUint8(signed.slice(i + 1));
-    const key = await crypto.subtle.importKey(
-      "raw",
-      new TextEncoder().encode(SECRET || "fallback-insecure"),
-      { name: "HMAC", hash: "SHA-256" },
-      false,
-      ["verify"],
-    );
-    const ok = await crypto.subtle.verify("HMAC", key, sigBytes, new TextEncoder().encode(value));
-    return ok ? value : null;
+    const combined = b64urlToUint8(encrypted);
+    if (combined.length < 13) return null;
+    const iv = combined.slice(0, 12);
+    const ct = combined.slice(12);
+    const key = await getKey();
+    const plain = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, ct);
+    return new TextDecoder().decode(plain);
   } catch {
     return null;
   }
@@ -42,9 +46,9 @@ export async function proxy(request: NextRequest) {
   const rawToken = request.cookies.get("token")?.value;
   const rawRol   = request.cookies.get("rol")?.value;
 
-  // Verificar ambas firmas antes de confiar en los valores
-  const token = rawToken ? await verifyAndExtract(rawToken) : null;
-  const rol   = rawRol   ? await verifyAndExtract(rawRol)   : null;
+  // Descifrar ambas cookies antes de confiar en los valores
+  const token = rawToken ? await decryptValue(rawToken) : null;
+  const rol   = rawRol   ? await decryptValue(rawRol)   : null;
 
   const isAuthPage  = pathname === "/login" || pathname === "/";
   const isAdminOnly =
@@ -62,7 +66,7 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(new URL("/panel-admin", request.url));
   }
 
-  // Rutas admin-only: requieren rol verificado criptográficamente
+  // Rutas admin-only: requieren rol descifrado correctamente
   if (isAdminOnly && rol !== "admin" && rol !== "super-admin") {
     return NextResponse.redirect(new URL("/panel-admin", request.url));
   }

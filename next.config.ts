@@ -45,6 +45,9 @@ const nextConfig: NextConfig = {
   experimental: {
     useCache: true,
   },
+  logging: {
+    serverFunctions: false, // Evita que Next.js registre argumentos de Server Actions en terminal
+  },
   async headers() {
     return [
       // Seguridad general para todas las rutas
