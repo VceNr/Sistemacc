@@ -1,25 +1,17 @@
 import type { NextConfig } from "next";
 
 const securityHeaders = [
-  // Evita que el navegador adivine el tipo de contenido (MIME sniffing)
   { key: "X-Content-Type-Options",    value: "nosniff" },
-  // Bloquea clickjacking — la app no puede cargarse en iframes externos
   { key: "X-Frame-Options",           value: "DENY" },
-  // Fuerza HTTPS permanentemente (1 año) + preload list
   { key: "Strict-Transport-Security", value: "max-age=31536000; includeSubDomains; preload" },
-  // Limita información de referrer al origen
   { key: "Referrer-Policy",           value: "strict-origin-when-cross-origin" },
-  // Desactiva APIs sensibles del navegador
   { key: "Permissions-Policy",        value: "camera=(), microphone=(), geolocation=(), payment=()" },
-  // Protege contra ataques Spectre en navegadores modernos
   { key: "Cross-Origin-Opener-Policy",   value: "same-origin" },
   { key: "Cross-Origin-Resource-Policy", value: "same-origin" },
-  // Content Security Policy
   {
     key: "Content-Security-Policy",
     value: [
       "default-src 'self'",
-      // unsafe-eval solo en desarrollo (React lo requiere para call stacks); en producción se elimina
       `script-src 'self' 'unsafe-inline'${process.env.NODE_ENV === "development" ? " 'unsafe-eval'" : ""}`,
       "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
       "font-src 'self' https://fonts.gstatic.com",
@@ -34,7 +26,6 @@ const securityHeaders = [
   },
 ];
 
-// Headers adicionales para rutas con datos sensibles (admin)
 const noCacheHeaders = [
   { key: "Cache-Control",  value: "no-store, no-cache, must-revalidate, proxy-revalidate" },
   { key: "Pragma",         value: "no-cache" },
@@ -46,16 +37,14 @@ const nextConfig: NextConfig = {
     useCache: true,
   },
   logging: {
-    serverFunctions: false, // Evita que Next.js registre argumentos de Server Actions en terminal
+    serverFunctions: false,
   },
   async headers() {
     return [
-      // Seguridad general para todas las rutas
       {
         source: "/(.*)",
         headers: securityHeaders,
       },
-      // No cachear páginas admin — contienen datos sensibles de seguridad
       {
         source: "/panel-admin",
         headers: noCacheHeaders,

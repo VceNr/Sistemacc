@@ -19,7 +19,6 @@ import { setSession, clearSession } from "@/lib/sesion";
 
 export type { Severidad, Estado, Hallazgo, HistorialItem, LogAuditoria, CreateHallazgoData };
 
-// ── Auditoría ──────────────────────────────────────────────────
 export async function registrarAuditoria(
   usuario: string, accion: string, detalle: string
 ): Promise<void> {
@@ -28,8 +27,6 @@ export async function registrarAuditoria(
       usuario, accion, detalle, timestamp: serverTimestamp(),
     });
   } catch (e) {
-    // No bloquear la operación principal si falla la auditoría,
-    // pero sí registrar el fallo para monitoreo del servidor
     logger.error("[Auditoría] Error al guardar log:", accion, e);
   }
 }
@@ -40,7 +37,6 @@ export async function getAuditLogs(): Promise<LogAuditoria[]> {
   return snap.docs.map(d => ({ id: d.id, ...d.data() })) as LogAuditoria[];
 }
 
-// ── Hallazgos ──────────────────────────────────────────────────
 export async function getHallazgos(): Promise<Hallazgo[]> {
   const q    = query(collection(db, "findings"), orderBy("creadoEn", "desc"));
   const snap = await getDocs(q);
@@ -77,7 +73,6 @@ export async function deleteHallazgo(id: string): Promise<void> {
   await deleteDoc(doc(db, "findings", id));
 }
 
-// ── Historial de cambios ───────────────────────────────────────
 export async function registrarHistorial(
   findingId:     string,
   campo:         string,
@@ -105,14 +100,11 @@ export async function getHistorialHallazgo(findingId: string): Promise<Historial
   return snap.docs.map(d => ({ id: d.id, ...d.data() })) as HistorialItem[];
 }
 
-// ── Firebase Storage ───────────────────────────────────────────
 const MIME_PERMITIDOS = ["image/jpeg", "image/png", "image/webp", "image/gif"];
-const MAX_SIZE_BYTES  = 5 * 1024 * 1024; // 5 MB
+const MAX_SIZE_BYTES  = 5 * 1024 * 1024;
 
 async function validarMime(file: File): Promise<boolean> {
-  // Verificar el tipo MIME declarado
   if (!MIME_PERMITIDOS.includes(file.type)) return false;
-  // Verificar los magic bytes reales (primeros 4 bytes del binario)
   const buffer = await file.slice(0, 4).arrayBuffer();
   const bytes  = new Uint8Array(buffer);
   const jpeg = bytes[0] === 0xFF && bytes[1] === 0xD8;
@@ -139,7 +131,6 @@ export async function subirImagenesEvidencia(
 
   return Promise.all(
     files.map(async (file) => {
-      // Usar extensión del MIME real, nunca del nombre del archivo
       const ext        = file.type.split("/")[1].replace("jpeg", "jpg");
       const path       = `findings/${findingId}/${crypto.randomUUID()}.${ext}`;
       const storageRef = ref(storage, path);
@@ -149,9 +140,6 @@ export async function subirImagenesEvidencia(
   );
 }
 
-// ── Migración one-time: docId aleatorio → UID ─────────────────
-// Requiere reglas de Firestore permisivas temporalmente.
-// Solo llamar una vez; después desplegar las reglas estrictas.
 export async function migrarUsersDocId(): Promise<{ migrados: number; omitidos: number }> {
   const snap = await getDocs(collection(db, "users"));
   let migrados = 0;
@@ -163,9 +151,7 @@ export async function migrarUsersDocId(): Promise<{ migrados: number; omitidos: 
 
     if (!uid || d.id === uid) { omitidos++; continue; }
 
-    // Crear doc con UID como ID
     await setDoc(doc(db, "users", uid), data);
-    // Eliminar doc con ID aleatorio
     await deleteDoc(doc(db, "users", d.id));
     migrados++;
   }
@@ -173,7 +159,6 @@ export async function migrarUsersDocId(): Promise<{ migrados: number; omitidos: 
   return { migrados, omitidos };
 }
 
-// ── Usuarios ───────────────────────────────────────────────────
 export async function getUserByUid(
   uid: string
 ): Promise<{ cargo: string; nombre: string; estado: string } | null> {
@@ -209,7 +194,6 @@ export async function toggleUserEstado(docId: string, nuevoEstado: "activo" | "i
   await updateDoc(doc(db, "users", docId), { estado: nuevoEstado });
 }
 
-// ── Login ──────────────────────────────────────────────────────
 export async function loginUser(email: string, password: string) {
   try {
     const userCredential = await signInWithEmailAndPassword(auth, email, password);
@@ -254,14 +238,12 @@ export async function loginUser(email: string, password: string) {
   }
 }
 
-// ── Registro ───────────────────────────────────────────────────
 export async function registerUser(
   nombre:   string,
   correo:   string,
   password: string,
   cargo:    string = "analista",
 ) {
-  // Usamos una app secundaria para no reemplazar la sesión del admin
   const secondaryAppName = `register-${Date.now()}`;
   const firebaseConfig = {
     apiKey:            process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -279,11 +261,9 @@ export async function registerUser(
     const userCredential = await createUserWithEmailAndPassword(secondaryAuth, correo, password);
     const user           = userCredential.user;
 
-    // Cerrar sesión de la app secundaria y eliminarla
     await signOut(secondaryAuth);
     await deleteApp(secondaryApp);
 
-    // Usar el UID como ID del documento — requerido por las Firestore Security Rules
     const newUserRef = doc(db, "users", user.uid);
     await setDoc(newUserRef, {
       uid:       user.uid,
@@ -306,7 +286,6 @@ export async function registerUser(
   }
 }
 
-// ── Logout ─────────────────────────────────────────────────────
 export async function logoutUser(nombre?: string) {
   try {
     if (nombre) {

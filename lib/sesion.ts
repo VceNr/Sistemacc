@@ -2,15 +2,12 @@
 
 import { cookies } from "next/headers";
 
-// SESSION_SECRET debe definirse en .env.local y en las variables del servidor.
 const SECRET = process.env.SESSION_SECRET ?? "";
 
 if (!SECRET && process.env.NODE_ENV === "production") {
   console.error("[sesion] SESSION_SECRET no está configurado. Las cookies NO están protegidas.");
 }
 
-// ── AES-GCM helpers ─────────────────────────────────────────────
-// Deriva una clave AES-256 a partir de SESSION_SECRET usando SHA-256.
 async function getKey(): Promise<CryptoKey> {
   const raw = await crypto.subtle.digest(
     "SHA-256",
@@ -37,8 +34,6 @@ function b64urlToUint8(b64: string): Uint8Array {
   return buf;
 }
 
-// Cifra con AES-GCM; devuelve base64url(IV || ciphertext+tag).
-// El resultado es opaco: no revela el valor original.
 async function encryptValue(plaintext: string): Promise<string> {
   const key = await getKey();
   const iv  = crypto.getRandomValues(new Uint8Array(12));
@@ -53,7 +48,6 @@ async function encryptValue(plaintext: string): Promise<string> {
   return bufToB64url(combined.buffer);
 }
 
-// Descifra; devuelve el texto en claro o null si el blob es inválido/fue manipulado.
 async function decryptValue(encrypted: string): Promise<string | null> {
   try {
     const combined = b64urlToUint8(encrypted);
@@ -68,34 +62,28 @@ async function decryptValue(encrypted: string): Promise<string | null> {
   }
 }
 
-// ── Configuración de cookies ────────────────────────────────────
 const COOKIE_OPTS = {
   httpOnly: true,
   secure:   process.env.NODE_ENV === "production",
   sameSite: "strict" as const,
   path:     "/",
-  maxAge:   60 * 60, // 1 hora
+  maxAge:   60 * 60,
 };
 
 const ALLOWED_ROLES = ["super-admin", "admin", "analista"];
 
-// ── API pública ─────────────────────────────────────────────────
-
-// Lee el UID descifrando la cookie — null si no existe o fue manipulada
 export async function getSession(): Promise<string | null> {
   const raw = (await cookies()).get("token")?.value;
   if (!raw) return null;
   return decryptValue(raw);
 }
 
-// Lee el rol descifrando la cookie — null si no existe o fue manipulada
 export async function getSessionRol(): Promise<string | null> {
   const raw = (await cookies()).get("rol")?.value;
   if (!raw) return null;
   return decryptValue(raw);
 }
 
-// Establece las cookies cifradas con AES-GCM
 export async function setSession(uid: string, rol: string): Promise<void> {
   if (!uid || typeof uid !== "string" || uid.trim() === "") {
     throw new Error("uid inválido");
@@ -112,7 +100,6 @@ export async function setSession(uid: string, rol: string): Promise<void> {
   store.set("rol",   encRol,   COOKIE_OPTS);
 }
 
-// Elimina las cookies de sesión
 export async function clearSession(): Promise<void> {
   const store = await cookies();
   store.delete("token");

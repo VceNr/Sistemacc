@@ -11,7 +11,6 @@ import {
 import { colorSeveridad, colorEstado } from "@/lib/types";
 import { logger } from "@/lib/logger";
 
-// Flujo lineal — solo se puede avanzar, nunca retroceder
 const FLUJO_ESTADOS: Estado[] = ["Nuevo", "En análisis", "En remediación", "Mitigado", "Cerrado"];
 
 export default function DetalleHallazgo() {
@@ -31,7 +30,7 @@ export default function DetalleHallazgo() {
   const [nuevoEstado,       setNuevoEstado]       = useState<Estado | "">("");
   const [guardandoEstado,   setGuardandoEstado]   = useState(false);
 
-  // Solo texto nuevo a AGREGAR — el texto original nunca se toca
+
   const [appendDescrip,   setAppendDescrip]   = useState("");
   const [appendRecomend,  setAppendRecomend]  = useState("");
   const [appendEvidencia, setAppendEvidencia] = useState("");
@@ -40,14 +39,14 @@ export default function DetalleHallazgo() {
   const puedeEditar       = rol === "admin" || rol === "super-admin" || hallazgo?.nombreCreador === nombre;
   const puedeCambiarEstado = rol === "admin" || rol === "super-admin";
 
-  // Estados disponibles para avanzar (solo hacia adelante, nunca retroceder)
+
   const estadosSiguientes: Estado[] = hallazgo
     ? FLUJO_ESTADOS.slice(FLUJO_ESTADOS.indexOf(hallazgo.estado) + 1)
     : [];
 
   async function handleCambiarEstado() {
     if (!hallazgo || !nuevoEstado || !user) return;
-    // Validación doble: el nuevo estado debe estar más adelante en el flujo
+
     const idxActual = FLUJO_ESTADOS.indexOf(hallazgo.estado);
     const idxNuevo  = FLUJO_ESTADOS.indexOf(nuevoEstado as Estado);
     if (idxNuevo <= idxActual) return;

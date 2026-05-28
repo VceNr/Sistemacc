@@ -15,7 +15,6 @@ import {
 import { loginUser } from "@/lib/api";
 import { checkRateLimit, recordFailure, clearRateLimit } from "@/lib/rate-limit";
 
-// ── Schema de validación ──────────────────────────────────────
 const loginSchema = z.object({
   email: z.string().email("Ingresa un correo electrónico válido."),
   password: z
@@ -25,7 +24,6 @@ const loginSchema = z.object({
 
 type LoginSchema = z.infer<typeof loginSchema>;
 
-// Hash SHA-256 del email — lo que llega a las server actions, nunca el email en crudo
 async function hashEmail(email: string): Promise<string> {
   const buf = await crypto.subtle.digest(
     "SHA-256",
@@ -43,7 +41,6 @@ function formatCountdown(ms: number): string {
   return `${min}m ${sec.toString().padStart(2, "0")}s`;
 }
 
-// ── Componente ────────────────────────────────────────────────
 export default function LoginForm() {
   const form = useForm<LoginSchema>({
     resolver: zodResolver(loginSchema),
@@ -54,7 +51,6 @@ export default function LoginForm() {
 
   const [lockRemaining, setLockRemaining] = useState<number>(0);
 
-  // Countdown tick — decrementa cada segundo mientras haya bloqueo activo
   useEffect(() => {
     const id = setInterval(() => {
       setLockRemaining(prev => (prev > 0 ? Math.max(0, prev - 1000) : 0));
@@ -65,7 +61,6 @@ export default function LoginForm() {
   async function onSubmit(values: LoginSchema) {
     const eh = await hashEmail(values.email);
 
-    // Verificar bloqueo activo en el servidor (por IP + hash de email)
     const rl = await checkRateLimit(eh);
     if (rl.blocked && rl.lockedUntil) {
       setLockRemaining(Math.max(0, rl.lockedUntil - Date.now()));
@@ -93,9 +88,7 @@ export default function LoginForm() {
       return;
     }
 
-    // Login exitoso — limpiar contador (fire-and-forget para no bloquear el redirect).
     clearRateLimit(eh).catch(() => {});
-    // Carga completa de página para que el browser procese Set-Cookie antes del render.
     window.location.assign(result.redirectUrl ?? "/panel-admin");
   }
 

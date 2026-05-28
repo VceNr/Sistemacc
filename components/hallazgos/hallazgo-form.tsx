@@ -43,7 +43,6 @@ export default function HallazgoForm({ redirectUrl }: HallazgoFormProps) {
     if (errores[name]) setErrores(prev => ({ ...prev, [name]: "" }));
   }
 
-  // ── Manejo de imágenes ─────────────────────────────────────
   function handleImagenes(e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files ?? []);
     if (files.length === 0) return;
@@ -57,7 +56,7 @@ export default function HallazgoForm({ redirectUrl }: HallazgoFormProps) {
 
     const nuevas = [...imagenes, ...validas].slice(0, 5);
 
-    // Limpiar previews anteriores antes de crear nuevos
+
     previews.forEach(url => URL.revokeObjectURL(url));
 
     setImagenes(nuevas);
@@ -98,11 +97,11 @@ export default function HallazgoForm({ redirectUrl }: HallazgoFormProps) {
 
     setLoading(true);
     try {
-      // Elimina TODO el HTML — sin tags permitidos, sin atributos
+
       const sanitize = (str: string) =>
         DOMPurify.sanitize(str, { ALLOWED_TAGS: [], ALLOWED_ATTR: [] });
 
-      // 1. Crear el documento y obtener su ID
+
       const findingId = await createHallazgo({
         fecha:         form.fecha,
         activo:        sanitize(form.activo),
@@ -116,12 +115,12 @@ export default function HallazgoForm({ redirectUrl }: HallazgoFormProps) {
         rolCreador:    rol ?? "analista",
       });
 
-      // 2. Subir imágenes usando el ID como carpeta
+
       setUploading(true);
       const imageUrls = await subirImagenesEvidencia(findingId, imagenes);
       setUploading(false);
 
-      // 3. Actualizar el documento con las URLs de las imágenes
+
       if (imageUrls.length > 0) {
         await updateHallazgo(findingId, { imagenesEvidencia: imageUrls });
       }
@@ -132,7 +131,6 @@ export default function HallazgoForm({ redirectUrl }: HallazgoFormProps) {
         `Hallazgo creado — ID: ${findingId} — Activo: ${form.activo} — Severidad: ${form.severidad} — Imágenes: ${imageUrls.length}`,
       );
 
-      // Limpiar object URLs antes de salir
       previews.forEach(url => URL.revokeObjectURL(url));
 
       router.push(redirectUrl);
