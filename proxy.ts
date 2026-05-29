@@ -14,12 +14,14 @@ function b64urlToUint8(b64: string): Uint8Array {
   return buf;
 }
 
+let _keyPromise: Promise<CryptoKey> | null = null;
 async function getKey(): Promise<CryptoKey> {
-  const raw = await crypto.subtle.digest(
-    "SHA-256",
-    new TextEncoder().encode(SECRET || "fallback-insecure-key-do-not-use"),
-  );
-  return crypto.subtle.importKey("raw", raw, { name: "AES-GCM" }, false, ["decrypt"]);
+  if (!_keyPromise) {
+    _keyPromise = crypto.subtle
+      .digest("SHA-256", new TextEncoder().encode(SECRET || "fallback-insecure-key-do-not-use"))
+      .then(raw => crypto.subtle.importKey("raw", raw, { name: "AES-GCM" }, false, ["decrypt"]));
+  }
+  return _keyPromise;
 }
 
 async function decryptValue(encrypted: string): Promise<string | null> {

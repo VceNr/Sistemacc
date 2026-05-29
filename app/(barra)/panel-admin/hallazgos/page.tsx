@@ -217,6 +217,7 @@ export default function HallazgosAdmin() {
   const [loading,      setLoading]      = useState(true);
   const [eliminando,   setEliminando]   = useState<string | null>(null);
   const [filtros,      setFiltros]      = useState<Filtros>(filtrosVacios());
+  const [activoInput,  setActivoInput]  = useState("");
   const [panelAbierto, setPanelAbierto] = useState(false);
   const [exportando,   setExportando]   = useState(false);
 
@@ -236,6 +237,13 @@ export default function HallazgosAdmin() {
       .finally(() => setLoading(false));
   }, [user]);
 
+  useEffect(() => {
+    const id = setTimeout(() => {
+      setFiltros(prev => ({ ...prev, activo: activoInput }));
+    }, 300);
+    return () => clearTimeout(id);
+  }, [activoInput]);
+
   function toggleSeveridad(s: Severidad) {
     setFiltros(prev => {
       const next = new Set(prev.severidades);
@@ -251,14 +259,17 @@ export default function HallazgosAdmin() {
     });
   }
 
-  const hallazgosFiltrados = hallazgos.filter(h => {
-    if (filtros.severidades.size > 0 && !filtros.severidades.has(h.severidad)) return false;
-    if (filtros.estados.size     > 0 && !filtros.estados.has(h.estado))        return false;
-    if (filtros.activo && !h.activo.toLowerCase().includes(filtros.activo.toLowerCase())) return false;
-    if (filtros.desde  && h.fecha < filtros.desde) return false;
-    if (filtros.hasta  && h.fecha > filtros.hasta) return false;
-    return true;
-  });
+  const hallazgosFiltrados = useMemo(() =>
+    hallazgos.filter(h => {
+      if (filtros.severidades.size > 0 && !filtros.severidades.has(h.severidad)) return false;
+      if (filtros.estados.size     > 0 && !filtros.estados.has(h.estado))        return false;
+      if (filtros.activo && !h.activo.toLowerCase().includes(filtros.activo.toLowerCase())) return false;
+      if (filtros.desde  && h.fecha < filtros.desde) return false;
+      if (filtros.hasta  && h.fecha > filtros.hasta) return false;
+      return true;
+    }),
+    [hallazgos, filtros],
+  );
 
   const chipsActivos = filtros.severidades.size + filtros.estados.size + (filtros.activo ? 1 : 0);
   const totalActivos = chipsActivos + (filtros.desde ? 1 : 0) + (filtros.hasta ? 1 : 0);
@@ -279,8 +290,10 @@ export default function HallazgosAdmin() {
     return Object.entries(counts).sort(([a], [b]) => a.localeCompare(b)).map(([date, count]) => ({ date, count }));
   }, [hallazgosFiltrados]);
 
-  const criticos = hallazgosFiltrados.filter(h => h.severidad === "Crítica").length;
-  const cerrados = hallazgosFiltrados.filter(h => h.estado   === "Cerrado").length;
+  const [criticos, cerrados] = useMemo(() => [
+    hallazgosFiltrados.filter(h => h.severidad === "Crítica").length,
+    hallazgosFiltrados.filter(h => h.estado   === "Cerrado").length,
+  ], [hallazgosFiltrados]);
 
   async function handleEliminar(id: string, activo: string) {
     if (!confirm("¿Seguro que deseas eliminar este hallazgo?")) return;
@@ -588,12 +601,12 @@ export default function HallazgosAdmin() {
                 <div style={{ height: 1, background: "rgba(255,255,255,0.05)", marginBottom: "1rem" }} />
                 <div>
                   <p style={{ fontSize: 11, color: "#44445e", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: "0.6rem" }}>Activo</p>
-                  <input placeholder="Buscar activo..." value={filtros.activo}
-                    onChange={e => setFiltros(prev => ({ ...prev, activo: e.target.value }))}
+                  <input placeholder="Buscar activo..." value={activoInput}
+                    onChange={e => setActivoInput(e.target.value)}
                     style={{
                       width: "100%", boxSizing: "border-box",
-                      background: filtros.activo ? "rgba(99,102,241,0.08)" : "rgba(255,255,255,0.03)",
-                      border: `1px solid ${filtros.activo ? "rgba(99,102,241,0.3)" : "rgba(255,255,255,0.08)"}`,
+                      background: activoInput ? "rgba(99,102,241,0.08)" : "rgba(255,255,255,0.03)",
+                      border: `1px solid ${activoInput ? "rgba(99,102,241,0.3)" : "rgba(255,255,255,0.08)"}`,
                       borderRadius: 8, padding: "7px 12px", color: "#e8e8f0", fontSize: 13, fontFamily: "inherit", outline: "none",
                     }} />
                 </div>
@@ -609,7 +622,7 @@ export default function HallazgosAdmin() {
           </div>
 
           {totalActivos > 0 && (
-            <button onClick={() => setFiltros(filtrosVacios())} style={{
+            <button onClick={() => { setFiltros(filtrosVacios()); setActivoInput(""); }} style={{
               background: "none", border: "1px solid rgba(255,255,255,0.08)",
               borderRadius: 8, padding: "7px 12px", color: "#6b6b94",
               fontSize: 12, cursor: "pointer", fontFamily: "inherit",

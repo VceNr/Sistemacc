@@ -11,12 +11,13 @@ export default function PanelAdmin() {
   const { user, rol, nombre, loading: authLoading } = useAuth();
   const router = useRouter();
 
-  const [hallazgos, setHallazgos] = useState<Hallazgo[]>([]);
-  const [loading,   setLoading]   = useState(true);
+  const [hallazgos,   setHallazgos]   = useState<Hallazgo[]>([]);
+  const [loading,     setLoading]     = useState(true);
+  const [loggingOut,  setLoggingOut]  = useState(false);
 
   useEffect(() => {
-    if (!authLoading && !user) router.push("/login");
-  }, [user, authLoading, router]);
+    if (!authLoading && !user && !loggingOut) router.push("/login");
+  }, [user, authLoading, loggingOut, router]);
 
   useEffect(() => {
     if (!user) return;
@@ -27,6 +28,7 @@ export default function PanelAdmin() {
   }, [user]);
 
   async function handleLogout() {
+    setLoggingOut(true);
     await logoutUser(nombre ?? undefined);
     router.push("/login");
   }
@@ -37,7 +39,7 @@ export default function PanelAdmin() {
   const cerrados      = hallazgos.filter(h => h.estado === "Cerrado").length;
   const recientes     = hallazgos.slice(0, 5);
 
-  if (authLoading || loading) return (
+  if (authLoading || loading || loggingOut) return (
     <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#0a0a0f", color: "#818cf8" }}>
       Cargando...
     </div>

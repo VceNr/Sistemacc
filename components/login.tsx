@@ -51,12 +51,14 @@ export default function LoginForm() {
 
   const [lockRemaining, setLockRemaining] = useState<number>(0);
 
+  const isLocked = lockRemaining > 0;
   useEffect(() => {
+    if (!isLocked) return;
     const id = setInterval(() => {
-      setLockRemaining(prev => (prev > 0 ? Math.max(0, prev - 1000) : 0));
+      setLockRemaining(prev => Math.max(0, prev - 1000));
     }, 1000);
     return () => clearInterval(id);
-  }, []);
+  }, [isLocked]);
 
   async function onSubmit(values: LoginSchema) {
     const eh = await hashEmail(values.email);

@@ -8,12 +8,14 @@ if (!SECRET && process.env.NODE_ENV === "production") {
   console.error("[sesion] SESSION_SECRET no está configurado. Las cookies NO están protegidas.");
 }
 
+let _keyPromise: Promise<CryptoKey> | null = null;
 async function getKey(): Promise<CryptoKey> {
-  const raw = await crypto.subtle.digest(
-    "SHA-256",
-    new TextEncoder().encode(SECRET || "fallback-insecure-key-do-not-use"),
-  );
-  return crypto.subtle.importKey("raw", raw, { name: "AES-GCM" }, false, ["encrypt", "decrypt"]);
+  if (!_keyPromise) {
+    _keyPromise = crypto.subtle
+      .digest("SHA-256", new TextEncoder().encode(SECRET || "fallback-insecure-key-do-not-use"))
+      .then(raw => crypto.subtle.importKey("raw", raw, { name: "AES-GCM" }, false, ["encrypt", "decrypt"]));
+  }
+  return _keyPromise;
 }
 
 function bufToB64url(buf: ArrayBuffer): string {
